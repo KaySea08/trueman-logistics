@@ -1,7 +1,7 @@
 import { Body, Controller, Headers, HttpException, HttpStatus, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import { createHash } from 'node:crypto';
-import Redis = require('ioredis');
+import Redis from 'ioredis';
 import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS } from '../redis/redis.module';

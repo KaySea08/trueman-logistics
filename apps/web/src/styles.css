@@ -24,7 +24,6 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
 }
 a {
   color: inherit;
@@ -131,6 +130,7 @@ input {
   margin-left: auto;
 }
 .site-header nav a {
+  font-family: "Montserrat", sans-serif;
   font-size: 12px;
   font-weight: 700;
   color: #34363b;
@@ -189,6 +189,7 @@ input {
   border: 1px solid #c90816;
   border-radius: 999px;
   color: #c90816;
+  font-family: "Montserrat", sans-serif;
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
@@ -2502,9 +2503,11 @@ main > section:not(.china-hero) p,
   .china-topbar .topbar-inner > div {
     display: none;
   }
-  .china-header .nav-account,
   .china-header .nav-quote {
     display: none;
+  }
+  .china-header .nav-account {
+    display: inline-flex;
   }
   .china-header .nav-inner {
     gap: 8px;
@@ -2826,6 +2829,70 @@ main > section:not(.china-hero) p,
   padding: 32px;
   box-shadow: 0 25px 90px #0004;
 }
+.customer-access-panel {
+  text-align: center;
+}
+.customer-access-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.customer-access-panel h2,
+.customer-access-panel p,
+.customer-access-panel label,
+.customer-access-panel .access-security-note {
+  text-align: center;
+}
+.customer-access-panel form {
+  justify-items: center;
+}
+.customer-access-panel form > label {
+  width: min(100%, 340px);
+}
+.customer-access-panel input {
+  text-align: center;
+}
+.customer-access-panel .access-submit {
+  width: fit-content;
+  padding-inline: 20px;
+}
+.customer-access-panel .access-links {
+  justify-content: center;
+}
+.customer-password-group {
+  display: grid;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #30394a;
+}
+.customer-password-field {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+.customer-password-field input {
+  text-align: center;
+  padding-right: 42px;
+}
+.customer-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #60798b;
+  cursor: pointer;
+}
+.customer-password-toggle:hover {
+  background: #edf4f7;
+  color: #174a68;
+}
 .access-close {
   position: absolute;
   right: 17px;
@@ -2884,6 +2951,26 @@ main > section:not(.china-hero) p,
 .access-panel input:focus {
   border-color: var(--red);
   box-shadow: 0 0 0 3px #c9081614;
+}
+.access-panel .customer-password-field > input {
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  border-color: #dce5eb;
+  padding: 11px 12px;
+  color: #1e3347;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.access-panel .customer-password-field > input:focus {
+  border-color: #4d9aaa;
+  box-shadow: 0 0 0 3px #4d9aaa18;
+}
+.access-panel .customer-password-field input {
+  text-align: center;
+  padding-right: 42px;
 }
 .access-submit {
   width: 100%;
@@ -2964,9 +3051,6 @@ main > section:not(.china-hero) p,
   color: #a80712;
 }
 @media (max-width: 760px) {
-  .nav-account {
-    display: none;
-  }
   .support-fab {
     right: 14px;
     bottom: 14px;
@@ -2976,10 +3060,60 @@ main > section:not(.china-hero) p,
     width: 44px;
   }
   .access-panel {
+    width: min(100%, 440px);
+    max-height: min(92dvh, 800px);
     padding: 25px 20px;
+  }
+  .customer-access-panel {
+    padding: 25px 18px;
   }
   .service-contact-actions {
     gap: 9px;
+  }
+}
+@media (max-width: 480px) {
+  .china-header .nav-inner {
+    gap: 2px;
+  }
+  .china-header .nav-admin {
+    padding: 7px 8px;
+    font-size: 10px;
+  }
+  .china-header .nav-account {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+  }
+  .china-header .nav-account span {
+    display: none;
+  }
+  .china-header .nav-account svg {
+    width: 14px;
+    height: 14px;
+  }
+  .china-header .menu-toggle {
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+  }
+  .china-header .menu-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+@media (max-width: 360px) {
+  .access-overlay {
+    padding: 10px;
+  }
+  .customer-access-panel {
+    padding: 22px 14px;
+    border-radius: 16px;
+  }
+  .customer-access-panel h2 {
+    font-size: 22px;
+  }
+  .customer-access-panel .access-links {
+    gap: 10px;
   }
 }
 .service-inquiry-button {

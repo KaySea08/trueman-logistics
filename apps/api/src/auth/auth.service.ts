@@ -3,7 +3,7 @@ import { createHmac, randomBytes, randomInt, createCipheriv, createDecipheriv, c
 import * as argon2 from 'argon2';
 import { authenticator } from 'otplib';
 import QRCode = require('qrcode');
-import Redis = require('ioredis');
+import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { REDIS } from '../redis/redis.module';
 import { Inject } from '@nestjs/common';

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { QuotesController } from './quotes.controller';
 import { QuotesService } from './quotes.service';
-import { SessionGuard } from '../auth/session.guard';
 import { AuditService } from '../common/audit.service';
-@Module({ controllers: [QuotesController], providers: [QuotesService, SessionGuard, AuditService] })
+@Module({ imports: [AuthModule], controllers: [QuotesController], providers: [QuotesService, AuditService] })
 export class QuotesModule {}

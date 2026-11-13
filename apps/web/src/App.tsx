@@ -50,7 +50,7 @@ function Header({ onAccount, onQuote }: { onAccount: () => void; onQuote: () => 
           {nav.map((item, index) => <a key={item.href} href={item.href} onClick={() => setOpen(false)} className={index === 0 ? 'active' : ''}>{item.label}</a>)}
         </nav>
         <a className="nav-admin" href="/admin" aria-label="Admin dashboard">Admin</a>
-        <button className="btn btn-outline nav-account" onClick={onAccount}><UserRound size={15}/> Customer login</button>
+        <button className="btn btn-outline nav-account" onClick={onAccount} aria-label="Customer login"><UserRound size={15}/><span>Customer login</span></button>
         <button className="btn btn-primary nav-quote" onClick={onQuote}>Get a quote <ArrowRight size={15}/></button>
         <button className="menu-toggle" onClick={() => setOpen(!open)} aria-label={open ? 'Close menu' : 'Open menu'}>{open ? <X/> : <Menu/>}</button>
       </div>

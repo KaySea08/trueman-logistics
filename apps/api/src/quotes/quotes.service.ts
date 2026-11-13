@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { createHmac, randomBytes, createHash } from 'node:crypto';
 import { Inject } from '@nestjs/common';
-import Redis = require('ioredis');
+import Redis from 'ioredis';
 import { REDIS } from '../redis/redis.module';
 import { Prisma, QuoteStatus, RateBasis, ShipmentMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';

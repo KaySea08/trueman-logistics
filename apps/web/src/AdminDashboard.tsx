@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Eye,
+  EyeOff,
   LogOut,
   Package,
   RefreshCw,
@@ -171,6 +173,7 @@ export default function AdminDashboard() {
   >("checking");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [challenge, setChallenge] = useState("");
   const [qrCode, setQrCode] = useState("");
@@ -488,15 +491,29 @@ export default function AdminDashboard() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </label>
-              <label>
+              <label className="admin-password-group" htmlFor="admin-password">
                 Password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <span className="admin-password-field">
+                  <input
+                    id="admin-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    className="admin-password-toggle"
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </span>
               </label>
               <button className="admin-primary" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in securely"}

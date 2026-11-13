@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import Redis = require('ioredis');
+import Redis from 'ioredis';
 
 export const REDIS = 'TRUEMAN_REDIS';
 @Global()

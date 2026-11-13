@@ -6,6 +6,7 @@ import { MailModule } from "./mail/mail.module";
 import { AuthModule } from "./auth/auth.module";
 import { SupportModule } from "./support/support.module";
 import { QuotesModule } from "./quotes/quotes.module";
+import { OperationsModule } from "./operations/operations.module";
 import { OriginMiddleware } from "./common/origin.middleware";
 import { PermissionsGuard } from "./rbac/permissions.guard";
 import { APP_GUARD } from "@nestjs/core";
@@ -17,6 +18,7 @@ import { APP_GUARD } from "@nestjs/core";
     AuthModule,
     SupportModule,
     QuotesModule,
+    OperationsModule,
   ],
   controllers: [HealthController],
   providers: [

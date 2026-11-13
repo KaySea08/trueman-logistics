@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser = require('cookie-parser');
-import helmet = require('helmet');
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: true });

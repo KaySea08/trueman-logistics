@@ -14,7 +14,7 @@ import {
   ShipmentStatus,
 } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import Redis = require('ioredis');
+import Redis from 'ioredis';
 import { REDIS } from '../redis/redis.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
@@ -25,7 +25,7 @@ import {
   ShipmentListQueryDto,
 } from './operations.dto';
 
-const TERMINAL_STATUSES = [
+const TERMINAL_STATUSES: ShipmentStatus[] = [
   ShipmentStatus.DELIVERED,
   ShipmentStatus.CANCELLED,
   ShipmentStatus.RETURNED_TO_SENDER,
@@ -237,7 +237,10 @@ export class OperationsService {
     const result = await this.prisma.$transaction(async (tx) => {
       const shipment = await tx.shipment.findUnique({ where: { id: shipmentId } });
       if (!shipment) throw new NotFoundException('Shipment not found.');
-      if (![ShipmentReviewStatus.PENDING_REVIEW, ShipmentReviewStatus.NEEDS_CORRECTION].includes(shipment.reviewStatus)) {
+      if (
+        shipment.reviewStatus !== ShipmentReviewStatus.PENDING_REVIEW &&
+        shipment.reviewStatus !== ShipmentReviewStatus.NEEDS_CORRECTION
+      ) {
         throw new ConflictException('This shipment has already received a final review decision.');
       }
 
