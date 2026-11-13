@@ -1,0 +1,97 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:${API_PORT:-3000}/api/v1
+      - VITE_SUPPORT_PHONE=${VITE_SUPPORT_PHONE:-}
+      - VITE_SUPPORT_WHATSAPP=${VITE_SUPPORT_WHATSAPP:-}
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./apps/web:/workspace/apps/web
+      - /workspace/apps/web/node_modules
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-trueman_app}:${POSTGRES_PASSWORD:-change_this_local_password}@postgres:5432/${POSTGRES_DB:-trueman_logistics}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - WEB_ORIGIN=http://localhost:${WEB_PORT:-5173}
+      - AUTH_PEPPER=${AUTH_PEPPER:-}
+      - MFA_ENCRYPTION_KEY=${MFA_ENCRYPTION_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-Trueman Logistics <no-reply@trueman.local>}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
+      - BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL:-}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
+      - BOOTSTRAP_ADMIN_NAME=${BOOTSTRAP_ADMIN_NAME:-}
+      - BOOTSTRAP_ADMIN_EMPLOYEE_CODE=${BOOTSTRAP_ADMIN_EMPLOYEE_CODE:-}
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - /workspace/apps/api/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trueman_logistics}
+      POSTGRES_USER: ${POSTGRES_USER:-trueman_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_this_local_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trueman_app} -d ${POSTGRES_DB:-trueman_logistics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,448 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum ShipmentStatus {
+  ORDER_RECEIVED
+  ORDER_CONFIRMED
+  AWAITING_PICKUP
+  PICKED_UP
+  ORIGIN_FACILITY
+  EXPORT_PROCESSING
+  DEPARTED_ORIGIN
+  IN_TRANSIT
+  ARRIVED_DESTINATION
+  CUSTOMS_PROCESSING
+  CUSTOMS_CLEARED
+  DESTINATION_FACILITY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  HELD_FOR_INSPECTION
+  RETURNED_TO_SENDER
+  CANCELLED
+}
+
+enum ShipmentMode {
+  EXPRESS
+  AIR
+  SEA
+  ROAD
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum ChallengePurpose {
+  SHIPMENT_ORDER
+  PASSWORD_RESET
+  LOGIN
+  CONTACT_VERIFICATION
+  EMAIL_VERIFICATION
+}
+
+enum AuditOutcome {
+  SUCCESS
+  FAILURE
+  DENIED
+}
+
+enum DocumentVisibility {
+  CUSTOMER
+  INTERNAL
+  RESTRICTED
+}
+
+enum InquiryStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CLOSED
+}
+
+enum QuoteStatus {
+  DRAFT
+  QUOTED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum RateBasis {
+  CHARGEABLE_KG
+  ACTUAL_KG
+  CBM
+}
+
+enum ShipmentReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  NEEDS_CORRECTION
+}
+
+enum ShipmentCreationSource {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+model User {
+  id String @id @default(cuid())
+  email String? @unique
+  phone String? @unique
+  passwordHash String?
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  status UserStatus @default(INVITED)
+  mfaEnabled Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  customer Customer?
+  staff StaffProfile?
+  sessions Session[]
+  mfaConfiguration MfaConfiguration?
+  userRoles UserRole[]
+  auditEvents AuditEvent[] @relation("AuditActor")
+  shipmentsCreated Shipment[] @relation("ShipmentCreator")
+  shipmentsReviewed Shipment[] @relation("ShipmentReviewer")
+  @@index([status, createdAt])
+}
+model Customer {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  displayName String
+  contacts CustomerContact[]
+  shipments Shipment[]
+  quotes Quote[]
+  createdAt DateTime @default(now())
+}
+model CustomerContact {
+  id String @id @default(cuid())
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type String
+  value String
+  verifiedAt DateTime?
+  isPrimary Boolean @default(false)
+  @@index([customerId, isPrimary])
+}
+model StaffProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  employeeCode String @unique
+  fullName String
+  active Boolean @default(true)
+  assignments DeliveryAssignment[]
+}
+model Role {
+  id String @id @default(cuid())
+  name String @unique
+  description String?
+  userRoles UserRole[]
+  rolePermissions RolePermission[]
+}
+model Permission {
+  id String @id @default(cuid())
+  key String @unique
+  description String?
+  rolePermissions RolePermission[]
+}
+model UserRole {
+  userId String
+  roleId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  assignedAt DateTime @default(now())
+  @@id([userId, roleId])
+}
+model RolePermission {
+  roleId String
+  permissionId String
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+  @@id([roleId, permissionId])
+}
+model Shipment {
+  id String @id @default(cuid())
+  shipmentNumber String @unique
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdByUserId String?
+  createdBy User? @relation("ShipmentCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  submitterRole String?
+  creationSource ShipmentCreationSource @default(CUSTOMER)
+  submittedAt DateTime @default(now())
+  reviewStatus ShipmentReviewStatus @default(PENDING_REVIEW)
+  reviewedByUserId String?
+  reviewedBy User? @relation("ShipmentReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt DateTime?
+  reviewNote String?
+  status ShipmentStatus @default(ORDER_RECEIVED)
+  quoteId String? @unique
+  quote Quote? @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  mode ShipmentMode
+  currency String @default("GHS")
+  quotedAmount Decimal? @db.Decimal(12,2)
+  declaredValue Decimal? @db.Decimal(12,2)
+  estimatedDelivery DateTime?
+  confirmedAt DateTime?
+  deliveredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  packages ShipmentPackage[]
+  addresses ShipmentAddress[]
+  trackingReference TrackingReference?
+  events ShipmentEvent[]
+  assignments DeliveryAssignment[]
+  payments Payment[]
+  documents ShipmentDocument[]
+  @@index([customerId, createdAt])
+  @@index([status, updatedAt])
+  @@index([reviewStatus, submittedAt])
+  @@index([creationSource, submittedAt])
+  @@index([createdByUserId, submittedAt])
+}
+model ShipmentPackage {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  description String
+  quantity Int @default(1)
+  weightKg Decimal @db.Decimal(9,3)
+  lengthCm Decimal? @db.Decimal(9,2)
+  widthCm Decimal? @db.Decimal(9,2)
+  heightCm Decimal? @db.Decimal(9,2)
+}
+model ShipmentAddress {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  kind String
+  contactName String
+  contactPhone String
+  countryCode String
+  city String
+  addressLine String
+  postalCode String?
+  @@index([shipmentId, kind])
+}
+model TrackingReference {
+  id String @id @default(cuid())
+  shipmentId String @unique
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  // Store a keyed digest for lookup; reveal the raw token only once at issuance.
+  tokenDigest String @unique
+  issuedAt DateTime @default(now())
+  revokedAt DateTime?
+}
+model VerificationChallenge {
+  id String @id @default(cuid())
+  subjectId String
+  purpose ChallengePurpose
+  codeDigest String
+  destination String?
+  expiresAt DateTime
+  consumedAt DateTime?
+  attempts Int @default(0)
+  maxAttempts Int @default(5)
+  createdAt DateTime @default(now())
+  @@index([subjectId, purpose, expiresAt])
+}
+model ShipmentEvent {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  previousStatus ShipmentStatus?
+  status ShipmentStatus
+  locationLabel String?
+  latitude Decimal? @db.Decimal(10,7)
+  longitude Decimal? @db.Decimal(10,7)
+  notes String?
+  source String
+  actorUserId String?
+  occurredAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([shipmentId, occurredAt])
+}
+model DeliveryAssignment {
+  id String @id @default(cuid())
+  shipmentId String
+  staffId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  staff StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  assignedAt DateTime @default(now())
+  unassignedAt DateTime?
+  @@index([staffId, assignedAt])
+}
+model Payment {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  provider String
+  providerReference String? @unique
+  amount Decimal @db.Decimal(12,2)
+  currency String @default("GHS")
+  status PaymentStatus @default(PENDING)
+  idempotencyKey String @unique
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([shipmentId, status])
+}
+model ShipmentDocument {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  objectKey String @unique
+  originalName String
+  mimeType String
+  sizeBytes BigInt
+  checksumSha256 String
+  visibility DocumentVisibility @default(INTERNAL)
+  uploadedAt DateTime @default(now())
+}
+model Notification {
+  id String @id @default(cuid())
+  shipmentId String?
+  channel String
+  destinationDigest String
+  templateKey String
+  status String @default("QUEUED")
+  providerMessageId String?
+  attempts Int @default(0)
+  nextAttemptAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, nextAttemptAt])
+}
+model Session {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenDigest String @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId, expiresAt])
+}
+model MfaConfiguration {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedSecret String
+  recoveryCodeDigests String[]
+  enabledAt DateTime?
+  rotatedAt DateTime @default(now())
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  actorUserId String?
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  action String
+  targetType String
+  targetId String?
+  outcome AuditOutcome
+  correlationId String
+  metadata Json?
+  previousHash String?
+  eventHash String @unique
+  occurredAt DateTime @default(now())
+  @@index([targetType, targetId, occurredAt])
+  @@index([actorUserId, occurredAt])
+}
+model SecurityEvent {
+  id String @id @default(cuid())
+  category String
+  severity String
+  sourceDigest String?
+  accountId String?
+  details Json?
+  occurredAt DateTime @default(now())
+  @@index([category, occurredAt])
+  @@index([severity, occurredAt])
+}
+
+model SupportInquiry {
+  id String @id @default(cuid())
+  fullName String
+  email String
+  phone String?
+  serviceName String
+  message String
+  status InquiryStatus @default(OPEN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+  @@index([email, createdAt])
+}
+
+
+model RateRule {
+  id String @id @default(cuid())
+  name String
+  mode ShipmentMode
+  basis RateBasis
+  originCountryCode String @default("CN")
+  destinationCountryCode String?
+  currency String @default("USD")
+  ratePerUnit Decimal @db.Decimal(12,4)
+  minimumCharge Decimal @default(0) @db.Decimal(12,2)
+  handlingFee Decimal @default(0) @db.Decimal(12,2)
+  volumetricDivisor Decimal @default(6000) @db.Decimal(12,2)
+  active Boolean @default(true)
+  validFrom DateTime @default(now())
+  validUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  quotes Quote[]
+  @@index([mode, destinationCountryCode, active, validFrom])
+}
+
+model Quote {
+  id String @id @default(cuid())
+  quoteNumber String @unique
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  rateRuleId String
+  rateRule RateRule @relation(fields: [rateRuleId], references: [id], onDelete: Restrict)
+  status QuoteStatus @default(QUOTED)
+  mode ShipmentMode
+  originCountryCode String @default("CN")
+  destinationCountryCode String
+  destinationCity String
+  currency String
+  subtotal Decimal @db.Decimal(12,2)
+  handlingFee Decimal @db.Decimal(12,2)
+  totalAmount Decimal @db.Decimal(12,2)
+  chargeableWeightKg Decimal? @db.Decimal(12,3)
+  volumeCbm Decimal? @db.Decimal(12,4)
+  validUntil DateTime
+  requestSnapshot Json
+  pricingSnapshot Json
+  acceptedAt DateTime?
+  rejectedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  shipment Shipment?
+  @@index([customerId, createdAt])
+  @@index([status, validUntil])
+}
