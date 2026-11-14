@@ -25,6 +25,7 @@ export default function CustomerAccess({ onClose }: { onClose: () => void }) {
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [canResendVerification, setCanResendVerification] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   async function submit(event: FormEvent) {
@@ -32,6 +33,7 @@ export default function CustomerAccess({ onClose }: { onClose: () => void }) {
     setBusy(true);
     setError("");
     setMessage("");
+    setCanResendVerification(false);
     const paths: Record<Mode, string> = {
       login: "/auth/login",
       register: "/auth/register",
@@ -63,8 +65,20 @@ export default function CustomerAccess({ onClose }: { onClose: () => void }) {
         body: JSON.stringify(payload),
       });
       const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message ?? "The request could not be completed.");
+      if (!response.ok) {
+        const responseMessage =
+          typeof data.message === "string"
+            ? data.message
+            : "The request could not be completed.";
+        if (
+          mode === "register" &&
+          response.status === 409 &&
+          responseMessage.toLowerCase().includes("email")
+        ) {
+          setCanResendVerification(true);
+        }
+        throw new Error(responseMessage);
+      }
       if (mode === "register") {
         setMode("verify");
         setMessage(
@@ -100,6 +114,33 @@ export default function CustomerAccess({ onClose }: { onClose: () => void }) {
       } else setMessage(data.message ?? "Completed successfully.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unexpected error.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function resendVerification() {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(`${API}/auth/resend-verification`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data.message === "string"
+            ? data.message
+            : "Could not resend the code.",
+        );
+      }
+      setMode("verify");
+      setMessage(data.message ?? "A verification code has been requested.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not resend the code.");
     } finally {
       setBusy(false);
     }
@@ -270,27 +311,27 @@ export default function CustomerAccess({ onClose }: { onClose: () => void }) {
               </button>
             </>
           ) : mode === "register" ? (
-            <button onClick={() => setMode("login")}>
-              Already registered? Sign in
-            </button>
+            <>
+              {canResendVerification && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={resendVerification}
+                >
+                  Resend verification code
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setCanResendVerification(false);
+                  setMode("login");
+                }}
+              >
+                Already registered? Sign in
+              </button>
+            </>
           ) : mode === "verify" ? (
-            <button
-              onClick={async () => {
-                try {
-                  const r = await fetch(`${API}/auth/resend-verification`, {
-                    method: "POST",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email }),
-                  });
-                  const d = await r.json();
-                  setMessage(d.message);
-                  setError("");
-                } catch {
-                  setError("Could not resend the code.");
-                }
-              }}
-            >
+            <button type="button" disabled={busy} onClick={resendVerification}>
               Resend verification code
             </button>
           ) : (

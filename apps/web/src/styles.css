@@ -1766,6 +1766,7 @@ input {
   display: flex;
   flex-direction: column;
   align-items: center;
+  text-align: center;
 }
 .china-eyebrow {
   display: inline-flex;
@@ -2048,6 +2049,14 @@ input {
   margin: 0;
   max-width: 290px;
 }
+.china-service-detail {
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7f8ca0;
+}
 .china-service-card > a {
   display: flex;
   align-items: center;
@@ -2243,62 +2252,103 @@ input {
   height: 100%;
 }
 .china-map-land {
-  fill: #8797ac;
-  opacity: 0.2;
+  fill: #a7b8cb;
+  fill-rule: evenodd;
+  opacity: 0.3;
+  stroke: #d7e1ed;
+  stroke-opacity: 0.28;
+  stroke-width: 0.65;
 }
 .china-route-line {
   fill: none;
   stroke: #ff4650;
-  stroke-width: 2;
-  stroke-dasharray: 6 7;
-  opacity: 0.9;
+  stroke-width: 1.65;
+  stroke-dasharray: 4 6;
+  opacity: 0.7;
 }
-.china-route-line-alt {
+.china-route-line-active {
   stroke: #ffd43b;
-  opacity: 0.65;
+  stroke-width: 2.2;
+  opacity: 0.95;
 }
 .china-route-origin {
-  position: absolute;
-  left: 72%;
-  top: 34%;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #ff4650;
-  filter: drop-shadow(0 4px 8px #0008);
+  filter: drop-shadow(0 3px 5px #0008);
 }
-.china-route-origin b {
+.china-route-origin-pin {
+  fill: #c90816;
+  stroke: #fff;
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: china-origin-float 3.6s ease-in-out infinite;
+}
+.china-route-origin-pin circle {
+  fill: #fff;
+  stroke: none;
+}
+.china-route-origin.is-static .china-route-origin-pin {
+  animation: none;
+}
+.china-route-origin-halo {
+  fill: #ff4650;
+  opacity: 0.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: china-origin-pulse 2.4s ease-out infinite;
+}
+.china-route-origin.is-static .china-route-origin-halo {
+  animation: none;
+}
+.china-route-origin-label,
+.china-route-origin-subtitle {
+  fill: #fff;
+  font-family: "DM Sans", sans-serif;
   font-size: 9px;
+  font-weight: 800;
   letter-spacing: 1px;
-  color: #fff;
-  background: #c90816;
-  border-radius: 20px;
-  padding: 5px 8px;
+}
+.china-route-origin-subtitle {
+  fill: #c2cad6;
+  font-size: 6px;
+  letter-spacing: 1.4px;
+}
+.china-route-plane {
+  fill: #ffd43b;
+  filter: drop-shadow(0 1px 3px #1119);
 }
 .china-route-point {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 2px solid #fff;
-  background: #ff3540;
-  border-radius: 50%;
-  box-shadow: 0 0 0 5px #ff354028;
+  fill: #ff4650;
+  stroke: #fff;
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
 }
-.route-point-one {
-  left: 27%;
-  top: 31%;
+@keyframes china-origin-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }
-.route-point-two {
-  left: 44%;
-  top: 69%;
+@keyframes china-origin-pulse {
+  0% {
+    opacity: 0.27;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
 }
-.route-point-three {
-  left: 83%;
-  top: 62%;
-}
-.route-point-four {
-  left: 17%;
-  top: 68%;
+@media (prefers-reduced-motion: reduce) {
+  .china-route-plane {
+    display: none;
+  }
+  .china-route-origin-pin,
+  .china-route-origin-halo {
+    animation: none;
+  }
 }
 .china-route-caption {
   position: absolute;
@@ -2775,7 +2825,9 @@ main > section:not(.china-hero) p,
 .service-contact-actions {
   display: flex;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #edf1f5;
 }
 .service-contact-actions a {
   display: inline-flex;
