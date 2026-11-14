@@ -1,9 +1,11 @@
 # Phase 1 — Architecture baseline
 
 ## Product boundary
+
 Trueman Logistics is a Ghana-based courier and freight platform. The initial release is a modular monolith: one NestJS deployment, one PostgreSQL database, and bounded modules with explicit internal contracts. This avoids premature distributed-systems overhead while preserving extraction seams.
 
 ## Runtime topology
+
 - `apps/web`: React + TypeScript + Vite customer web application.
 - `apps/api`: NestJS REST API; `/api/v1` prefix; health endpoint included.
 - PostgreSQL 16: authoritative transactional store.
@@ -12,6 +14,7 @@ Trueman Logistics is a Ghana-based courier and freight platform. The initial rel
 - Object storage: private bucket for shipment documents; signed, short-lived download URLs only.
 
 ## Bounded contexts
+
 1. Identity & Access — customers, staff, sessions, MFA, roles and permissions.
 2. Customer & Contacts — verified contact channels and customer profile.
 3. Quotation — versioned rate cards, dimensional/actual weight, surcharges and quote expiry.
@@ -24,6 +27,7 @@ Trueman Logistics is a Ghana-based courier and freight platform. The initial rel
 10. Audit & Security — append-only application events, security signals and integrity verification.
 
 ## Critical invariants
+
 - A shipment is not finalized until a one-time challenge bound to the order session and purpose is verified.
 - OTPs are random, short-lived, hashed at rest, attempt-limited, single-use and never logged.
 - Tracking credentials are independently generated, high entropy and stored as keyed digests. They are identifiers, not bearer authorization for sensitive operations.
@@ -34,9 +38,11 @@ Trueman Logistics is a Ghana-based courier and freight platform. The initial rel
 - Audit events are hash chained and periodically anchored outside the application trust boundary in production.
 
 ## Data model notes
+
 `schema.prisma` defines the initial relational shape. Production migrations must be reviewed, tested and applied through CI/CD. Before real deployment, add tenant boundaries only if Trueman will host multiple independent logistics operators; do not add tenant complexity without an actual tenancy requirement. Use country codes, currency codes and explicit units. Financial values use Decimal, never floating point.
 
 ## API conventions
+
 - Versioned REST: `/api/v1/<resource>`.
 - DTO validation at the boundary; reject unknown properties.
 - Consistent error envelope with correlation ID; never expose stack traces.
@@ -45,4 +51,5 @@ Trueman Logistics is a Ghana-based courier and freight platform. The initial rel
 - OpenAPI contract generated from NestJS DTOs once API modules are implemented.
 
 ## Production evolution
+
 Keep modules independent through domain services, repository interfaces and events. Extract notification delivery, document processing or tracking ingestion only when throughput, team ownership or isolation needs justify it. Use an outbox pattern for reliable asynchronous side effects before introducing a broker.
