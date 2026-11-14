@@ -1,37 +1,307 @@
-import { FormEvent, useState } from 'react';
-import { Eye, EyeOff, X } from 'lucide-react';
-import Brand from './Brand';
+import { FormEvent, useState } from "react";
+import { Eye, EyeOff, X } from "lucide-react";
+import Brand from "./Brand";
 
-const API = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3000/api/v1';
-type Mode = 'login' | 'register' | 'verify' | 'mfa' | 'mfaSetup' | 'forgot' | 'reset';
+const API =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  "http://localhost:3000/api/v1";
+type Mode =
+  | "login"
+  | "register"
+  | "verify"
+  | "mfa"
+  | "mfaSetup"
+  | "forgot"
+  | "reset";
 export default function CustomerAccess({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<Mode>('login');
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [fullName, setFullName] = useState(''); const [phone, setPhone] = useState(''); const [code, setCode] = useState(''); const [challenge, setChallenge] = useState(''); const [qrCode, setQrCode] = useState(''); const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]); const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [challenge, setChallenge] = useState("");
+  const [qrCode, setQrCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError(''); setMessage('');
-    const paths: Record<Mode, string> = { login: '/auth/login', register: '/auth/register', verify: '/auth/verify-email', mfa: '/auth/mfa/login', mfaSetup: '/auth/mfa/enable', forgot: '/auth/password/forgot', reset: '/auth/password/reset' };
-    const payload: Record<string, unknown> = mode === 'mfaSetup' ? { code } : mode === 'register' ? { email, password, fullName, phone: phone || undefined } : mode === 'login' ? { email, password } : mode === 'verify' ? { email, code } : mode === 'mfa' ? { challenge, code } : mode === 'forgot' ? { email } : { email, code, newPassword: password };
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    const paths: Record<Mode, string> = {
+      login: "/auth/login",
+      register: "/auth/register",
+      verify: "/auth/verify-email",
+      mfa: "/auth/mfa/login",
+      mfaSetup: "/auth/mfa/enable",
+      forgot: "/auth/password/forgot",
+      reset: "/auth/password/reset",
+    };
+    const payload: Record<string, unknown> =
+      mode === "mfaSetup"
+        ? { code }
+        : mode === "register"
+          ? { email, password, fullName, phone: phone || undefined }
+          : mode === "login"
+            ? { email, password }
+            : mode === "verify"
+              ? { email, code }
+              : mode === "mfa"
+                ? { challenge, code }
+                : mode === "forgot"
+                  ? { email }
+                  : { email, code, newPassword: password };
     try {
-      const response = await fetch(`${API}${paths[mode]}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await response.json(); if (!response.ok) throw new Error(data.message ?? 'The request could not be completed.');
-      if (mode === 'register') { setMode('verify'); setMessage('We sent a verification code to your email. In local development, open Mailpit at http://localhost:8025.'); } else if (mode === 'verify') setMessage(data.message ?? 'Email verified. You can now sign in.');
-      else if (mode === 'login' && data.mfaRequired) { setChallenge(data.challenge); setMode('mfa'); }
-      else if (mode === 'login' && data.mfaSetupRequired) { const setup = await fetch(`${API}/auth/mfa/setup`, { method: 'POST', credentials: 'include' }); const setupData = await setup.json(); if (!setup.ok) throw new Error(setupData.message ?? 'Could not initialize MFA.'); setQrCode(setupData.qrCodeDataUrl); setRecoveryCodes(setupData.recoveryCodes); setMode('mfaSetup'); }
-      else if (mode === 'login' || mode === 'mfa' || mode === 'mfaSetup') { setMessage(mode === 'mfaSetup' ? 'MFA enabled. Your privileged account is protected.' : 'You are signed in. Your secure session is active.'); }
-      else if (mode === 'forgot') { setMode('reset'); setMessage('If the account exists, a reset code has been sent to your email.'); }
-      else setMessage(data.message ?? 'Completed successfully.');
-    } catch (e) { setError(e instanceof Error ? e.message : 'Unexpected error.'); }
-    finally { setBusy(false); }
+      const response = await fetch(`${API}${paths[mode]}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.message ?? "The request could not be completed.");
+      if (mode === "register") {
+        setMode("verify");
+        setMessage(
+          "We sent a verification code to your email. In local development, open Mailpit at http://localhost:8025.",
+        );
+      } else if (mode === "verify")
+        setMessage(data.message ?? "Email verified. You can now sign in.");
+      else if (mode === "login" && data.mfaRequired) {
+        setChallenge(data.challenge);
+        setMode("mfa");
+      } else if (mode === "login" && data.mfaSetupRequired) {
+        const setup = await fetch(`${API}/auth/mfa/setup`, {
+          method: "POST",
+          credentials: "include",
+        });
+        const setupData = await setup.json();
+        if (!setup.ok)
+          throw new Error(setupData.message ?? "Could not initialize MFA.");
+        setQrCode(setupData.qrCodeDataUrl);
+        setRecoveryCodes(setupData.recoveryCodes);
+        setMode("mfaSetup");
+      } else if (mode === "login" || mode === "mfa" || mode === "mfaSetup") {
+        setMessage(
+          mode === "mfaSetup"
+            ? "MFA enabled. Your privileged account is protected."
+            : "You are signed in. Your secure session is active.",
+        );
+      } else if (mode === "forgot") {
+        setMode("reset");
+        setMessage(
+          "If the account exists, a reset code has been sent to your email.",
+        );
+      } else setMessage(data.message ?? "Completed successfully.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unexpected error.");
+    } finally {
+      setBusy(false);
+    }
   }
-  const title: Record<Mode, string> = { login: 'Customer login', register: 'Create your account', verify: 'Verify your email', mfa: 'Two-factor verification', mfaSetup: 'Secure your staff account', forgot: 'Reset your password', reset: 'Choose a new password' };
-  return <div className="access-overlay" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}><section className="access-panel customer-access-panel" data-lenis-prevent role="dialog" aria-modal="true" aria-labelledby="access-title"><button className="access-close" onClick={onClose} aria-label="Close"><X/></button><div className="customer-access-brand"><Brand href="/"/></div><h2 id="access-title">{title[mode]}</h2><p>Secure access to your Trueman Logistics account.</p><form onSubmit={submit}>
-    {mode === 'mfaSetup' && <div className="mfa-setup-content"><p>Scan this QR code with an authenticator app such as Microsoft Authenticator or Google Authenticator.</p>{qrCode && <img src={qrCode} alt="Authenticator setup QR code"/>}<b>Save these recovery codes somewhere safe:</b><code>{recoveryCodes.join('  ')}</code></div>}
-    {mode === 'register' && <label>Full name<input required minLength={2} value={fullName} onChange={e=>setFullName(e.target.value)} autoComplete="name"/></label>}
-    {!['mfa','mfaSetup'].includes(mode) && <label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email"/></label>}
-    {mode === 'register' && <label>Phone number (optional)<input value={phone} onChange={e=>setPhone(e.target.value)} autoComplete="tel" placeholder="Include country code"/></label>}
-    {['login','register','reset'].includes(mode) && <label className="customer-password-group" htmlFor="customer-password">{mode === 'reset' ? 'New password' : 'Password'}<span className="customer-password-field"><input id="customer-password" required type={showPassword ? 'text' : 'password'} minLength={mode === 'login' ? 1 : 12} value={password} onChange={e=>setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'}/><button className="customer-password-toggle" type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} onClick={() => setShowPassword(visible => !visible)}>{showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}</button></span></label>}
-    {['verify','mfa','mfaSetup','reset'].includes(mode) && <label>Six-digit verification code<input required inputMode="numeric" pattern={mode === 'mfa' ? '([0-9]{6}|[A-Fa-f0-9]{10})' : '[0-9]{6}'} maxLength={mode === 'mfa' ? 10 : 6} value={code} onChange={e=>setCode(e.target.value)} autoComplete="one-time-code"/></label>}
-    <button className="btn btn-primary access-submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : mode === 'verify' ? 'Verify email' : mode === 'mfa' ? 'Verify and sign in' : mode === 'mfaSetup' ? 'Enable MFA' : mode === 'forgot' ? 'Send reset code' : 'Reset password'}</button>
-  </form>{error && <p className="access-error" role="alert">{error}</p>}{message && <p className="access-success" role="status">{message}</p>}<div className="access-links">{mode === 'login' ? <><button onClick={()=>setMode('register')}>Create an account</button><button onClick={()=>setMode('forgot')}>Forgot password?</button></> : mode === 'register' ? <button onClick={()=>setMode('login')}>Already registered? Sign in</button> : mode === 'verify' ? <button onClick={async()=>{try{const r=await fetch(`${API}/auth/resend-verification`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});const d=await r.json();setMessage(d.message);setError('');}catch{setError('Could not resend the code.');}}}>Resend verification code</button> : <button onClick={()=>setMode('login')}>Back to sign in</button>}</div><small className="access-security-note">We never ask you to share your password or verification code with support staff.</small></section></div>;
+  const title: Record<Mode, string> = {
+    login: "Customer login",
+    register: "Create your account",
+    verify: "Verify your email",
+    mfa: "Two-factor verification",
+    mfaSetup: "Secure your staff account",
+    forgot: "Reset your password",
+    reset: "Choose a new password",
+  };
+  return (
+    <div
+      className="access-overlay"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="access-panel customer-access-panel"
+        data-lenis-prevent
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="access-title"
+      >
+        <button className="access-close" onClick={onClose} aria-label="Close">
+          <X />
+        </button>
+        <div className="customer-access-brand">
+          <Brand href="/" />
+        </div>
+        <h2 id="access-title">{title[mode]}</h2>
+        <p>Secure access to your Trueman Logistics account.</p>
+        <form onSubmit={submit}>
+          {mode === "mfaSetup" && (
+            <div className="mfa-setup-content">
+              <p>
+                Scan this QR code with an authenticator app such as Microsoft
+                Authenticator or Google Authenticator.
+              </p>
+              {qrCode && <img src={qrCode} alt="Authenticator setup QR code" />}
+              <b>Save these recovery codes somewhere safe:</b>
+              <code>{recoveryCodes.join("  ")}</code>
+            </div>
+          )}
+          {mode === "register" && (
+            <label>
+              Full name
+              <input
+                required
+                minLength={2}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
+              />
+            </label>
+          )}
+          {!["mfa", "mfaSetup"].includes(mode) && (
+            <label>
+              Email address
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </label>
+          )}
+          {mode === "register" && (
+            <label>
+              Phone number (optional)
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
+                placeholder="Include country code"
+              />
+            </label>
+          )}
+          {["login", "register", "reset"].includes(mode) && (
+            <label
+              className="customer-password-group"
+              htmlFor="customer-password"
+            >
+              {mode === "reset" ? "New password" : "Password"}
+              <span className="customer-password-field">
+                <input
+                  id="customer-password"
+                  required
+                  type={showPassword ? "text" : "password"}
+                  minLength={
+                    mode === "login" ? 1 : mode === "register" ? 5 : 12
+                  }
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete={
+                    mode === "login" ? "current-password" : "new-password"
+                  }
+                />
+                <button
+                  className="customer-password-toggle"
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </span>
+            </label>
+          )}
+          {["verify", "mfa", "mfaSetup", "reset"].includes(mode) && (
+            <label>
+              Six-digit verification code
+              <input
+                required
+                inputMode="numeric"
+                pattern={
+                  mode === "mfa" ? "([0-9]{6}|[A-Fa-f0-9]{10})" : "[0-9]{6}"
+                }
+                maxLength={mode === "mfa" ? 10 : 6}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                autoComplete="one-time-code"
+              />
+            </label>
+          )}
+          <button className="btn btn-primary access-submit" disabled={busy}>
+            {busy
+              ? "Please wait…"
+              : mode === "login"
+                ? "Sign in"
+                : mode === "register"
+                  ? "Create account"
+                  : mode === "verify"
+                    ? "Verify email"
+                    : mode === "mfa"
+                      ? "Verify and sign in"
+                      : mode === "mfaSetup"
+                        ? "Enable MFA"
+                        : mode === "forgot"
+                          ? "Send reset code"
+                          : "Reset password"}
+          </button>
+        </form>
+        {error && (
+          <p className="access-error" role="alert">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p className="access-success" role="status">
+            {message}
+          </p>
+        )}
+        <div className="access-links">
+          {mode === "login" ? (
+            <>
+              <button onClick={() => setMode("register")}>
+                Create an account
+              </button>
+              <button onClick={() => setMode("forgot")}>
+                Forgot password?
+              </button>
+            </>
+          ) : mode === "register" ? (
+            <button onClick={() => setMode("login")}>
+              Already registered? Sign in
+            </button>
+          ) : mode === "verify" ? (
+            <button
+              onClick={async () => {
+                try {
+                  const r = await fetch(`${API}/auth/resend-verification`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email }),
+                  });
+                  const d = await r.json();
+                  setMessage(d.message);
+                  setError("");
+                } catch {
+                  setError("Could not resend the code.");
+                }
+              }}
+            >
+              Resend verification code
+            </button>
+          ) : (
+            <button onClick={() => setMode("login")}>Back to sign in</button>
+          )}
+        </div>
+        <small className="access-security-note">
+          We never ask you to share your password or verification code with
+          support staff.
+        </small>
+      </section>
+    </div>
+  );
 }
