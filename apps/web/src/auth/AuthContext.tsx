@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useCallback,
   useEffect,
   useState,
   type ReactNode,
@@ -14,6 +15,7 @@ export type AuthUser = {
   status: string;
   customer: { displayName: string } | null;
   roles: string[];
+  permissions: string[];
   mfaEnabled: boolean;
 };
 
@@ -58,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [returnTo, setReturnToState] = useState("/dashboard");
 
-  async function refreshUser() {
+  const refreshUser = useCallback(async () => {
     const response = await apiFetch("/auth/me", { method: "GET" });
     const payload: unknown = await response.json().catch(() => null);
     if (response.status === 401) {
@@ -75,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const currentUser = payload as AuthUser;
     setUser(currentUser);
     return currentUser;
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

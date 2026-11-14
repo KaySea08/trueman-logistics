@@ -92,10 +92,25 @@ Phone verification remains unavailable until these credentials and a sender numb
 
    Remove the four `BOOTSTRAP_ADMIN_*` values from `.env` immediately after the script succeeds. Do not create a public administrator registration route.
 
-6. View local verification emails at `http://localhost:8025` (Mailpit). OTPs are delivered there; they are not printed in application logs.
-7. Open `http://localhost:5173`, select Customer login, create a customer account, and verify the email using the code in Mailpit.
-8. Sign in as the bootstrap administrator and complete authenticator MFA enrollment. Save the recovery codes offline.
-9. If you changed Vite support contact variables, restart the web service so Vite reloads them:
+6. To grant quote-only access to an existing active staff account, first seed the `QUOTE_OFFICER` role and permission, then temporarily add the account email to `.env`:
+
+   ```dotenv
+   QUOTE_OFFICER_EMAIL=staff-member@your-company.com
+   ```
+
+   Apply the role and remove the temporary value:
+
+   ```powershell
+   docker compose exec api npm run db:seed
+   docker compose run --rm --no-deps api npm run db:grant-quote-officer
+   ```
+
+   Remove `QUOTE_OFFICER_EMAIL` from `.env` after the command succeeds. The command refuses accounts without an active staff profile. Quote officers must enroll MFA at first sign-in and only see requests assigned to them. Managers with `rates:manage` retain the shared queue and assignment controls.
+
+7. View local verification emails at `http://localhost:8025` (Mailpit). OTPs are delivered there; they are not printed in application logs.
+8. Open `http://localhost:5173`, select Customer login, create a customer account, and verify the email using the code in Mailpit.
+9. Sign in as the bootstrap administrator and complete authenticator MFA enrollment. Save the recovery codes offline.
+10. If you changed Vite support contact variables, restart the web service so Vite reloads them:
 
    ```powershell
    docker compose restart web

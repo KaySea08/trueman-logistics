@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
   CheckCircle2,
@@ -6,28 +7,17 @@ import {
   Package,
   X,
 } from "lucide-react";
-const API =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://localhost:3000/api/v1";
-type Quote = {
+import { apiRequest, ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
+
+type QuoteRequestReceipt = {
   id: string;
-  quoteNumber: string;
-  mode: string;
-  currency: string;
-  subtotal: string;
-  handlingFee: string;
-  totalAmount: string;
-  validUntil: string;
-  chargeableWeightKg?: string;
-  volumeCbm?: string;
-  pricingSnapshot: {
-    basis: string;
-    billableUnits: number;
-    ratePerUnit: number;
-    actualWeightKg: number;
-    volumetricWeightKg: number;
-  };
+  requestNumber: string;
+  status: string;
+  createdAt: string;
+  message: string;
 };
+
 export default function ShipmentQuote({
   onClose,
   onLogin,
@@ -35,6 +25,8 @@ export default function ShipmentQuote({
   onClose: () => void;
   onLogin: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [mode, setMode] = useState("AIR");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
@@ -51,20 +43,19 @@ export default function ShipmentQuote({
   const [width, setWidth] = useState("30");
   const [height, setHeight] = useState("30");
   const [instructions, setInstructions] = useState("");
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [tracking, setTracking] = useState("");
+  const [receipt, setReceipt] = useState<QuoteRequestReceipt | null>(null);
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [step, setStep] = useState<"request" | "quote" | "complete">("request");
+  const [step, setStep] = useState<"request" | "submitted">("request");
   async function request(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`${API}/quotes`, {
+      const data = await apiRequest<QuoteRequestReceipt>("/quotes", {
         method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({
           mode,
           destinationCountryCode: country.toUpperCase(),
@@ -88,37 +79,19 @@ export default function ShipmentQuote({
           ],
         }),
       });
-      const data = await res.json();
-      if (res.status === 401) {
-        setError("Please sign in to request a shipment quotation.");
-        return;
-      }
-      if (!res.ok)
-        throw new Error(data.message || "Unable to create quotation.");
-      setQuote(data);
-      setStep("quote");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function accept() {
-    if (!quote) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await fetch(`${API}/quotes/${quote.id}/accept`, {
-        method: "POST",
-        credentials: "include",
+      setReceipt(data);
+      setStep("submitted");
+      await queryClient.invalidateQueries({
+        queryKey: ["customer", user?.id, "quote-requests"],
       });
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.message || "Unable to accept quotation.");
-      setTracking(data.trackingReference || "");
-      setStep("complete");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed.");
+      setError(
+        err instanceof ApiError && err.status === 401
+          ? "Please sign in to send a quotation request."
+          : err instanceof Error
+            ? err.message
+            : "Request failed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -146,9 +119,7 @@ export default function ShipmentQuote({
             <h2 id="shipment-quote-title">
               {step === "request"
                 ? "Request a shipping quote"
-                : step === "quote"
-                  ? "Your quotation"
-                  : "Shipment created"}
+                : "Request received"}
             </h2>
           </div>
           <button
@@ -319,10 +290,10 @@ export default function ShipmentQuote({
               </label>
             </div>
             <p className="shipment-quote-hint">
-              Dimensions and weight are used to calculate chargeable weight or
-              cargo volume. For multiple packages, enter the package count and
-              the dimensions and weight of each identical package. For mixed
-              packages, request a manual quotation.
+              Our team will review these details, calculate your quotation, and
+              email you when it is ready. For multiple packages, enter the
+              package count and dimensions and weight for each identical
+              package. For mixed packages, request a manual quotation.
             </p>
             <button
               className="btn btn-primary shipment-quote-submit"
@@ -333,89 +304,28 @@ export default function ShipmentQuote({
                   <LoaderCircle className="spin" size={16} /> Calculating…
                 </>
               ) : (
-                "Calculate quotation"
+                "Send quote request"
               )}{" "}
               <ArrowRight size={16} />
             </button>
           </form>
         )}
-        {step === "quote" && quote && (
-          <div className="shipment-quote-result">
-            <div className="shipment-quote-number">
-              {quote.quoteNumber}
-              <span>
-                · Valid until {new Date(quote.validUntil).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="shipment-quote-total">
-              <small>Quoted total</small>
-              <strong>
-                {quote.currency} {Number(quote.totalAmount).toFixed(2)}
-              </strong>
-            </div>
-            <dl>
-              <div>
-                <dt>Shipping method</dt>
-                <dd>{quote.mode}</dd>
-              </div>
-              <div>
-                <dt>Billing basis</dt>
-                <dd>{quote.pricingSnapshot.basis.replace(/_/g, " ")}</dd>
-              </div>
-              <div>
-                <dt>Billable units</dt>
-                <dd>{quote.pricingSnapshot.billableUnits}</dd>
-              </div>
-              <div>
-                <dt>Freight charge</dt>
-                <dd>
-                  {quote.currency} {Number(quote.subtotal).toFixed(2)}
-                </dd>
-              </div>
-              <div>
-                <dt>Handling fee</dt>
-                <dd>
-                  {quote.currency} {Number(quote.handlingFee).toFixed(2)}
-                </dd>
-              </div>
-            </dl>
-            <p>
-              Transit estimates and any customs, duties or destination charges
-              not included in this quotation will be confirmed separately by
-              Trueman Logistics.
-            </p>
-            <button
-              className="btn btn-primary shipment-quote-submit"
-              onClick={accept}
-              disabled={busy}
-            >
-              {busy ? "Processing…" : "Accept quotation and create shipment"}{" "}
-              <ArrowRight size={16} />
-            </button>
-            <button
-              className="shipment-quote-secondary"
-              onClick={() => setStep("request")}
-            >
-              Edit shipment request
-            </button>
-          </div>
-        )}
-        {step === "complete" && (
+        {step === "submitted" && receipt && (
           <div className="shipment-quote-result shipment-quote-complete">
             <CheckCircle2 size={42} />
-            <h3>Your shipment has been created</h3>
+            <h3>Your quote request is in the queue</h3>
             <p>
-              Keep this tracking reference. It is shown only once for security.
+              Our team will calculate the quotation and email you when it is
+              ready.
             </p>
             <div className="shipment-tracking-token">
-              {tracking ||
-                "Shipment already accepted. Contact support for the existing reference."}
+              {receipt.requestNumber}
             </div>
             <button
               className="btn btn-primary shipment-quote-submit"
               onClick={onClose}
             >
-              Done
+              Done <ArrowRight size={16} />
             </button>
           </div>
         )}

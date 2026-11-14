@@ -86,6 +86,25 @@ enum QuoteStatus {
   EXPIRED
 }
 
+enum QuoteRequestStatus {
+  REQUESTED
+  PROCESSING
+  SENDING
+  SENT
+}
+
+enum QuoteOutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  DEAD_LETTER
+}
+
+enum QuoteOutboxType {
+  REQUEST_RECEIVED
+  QUOTE_READY
+}
+
 enum RateBasis {
   CHARGEABLE_KG
   ACTUAL_KG
@@ -122,6 +141,7 @@ model User {
   mfaConfiguration MfaConfiguration?
   userRoles UserRole[]
   auditEvents AuditEvent[] @relation("AuditActor")
+  quoteRequestHistory QuoteRequestHistory[] @relation("QuoteRequestHistoryActor")
   shipmentsCreated Shipment[] @relation("ShipmentCreator")
   shipmentsReviewed Shipment[] @relation("ShipmentReviewer")
   @@index([status, createdAt])
@@ -134,6 +154,7 @@ model Customer {
   contacts CustomerContact[]
   shipments Shipment[]
   quotes Quote[]
+  quoteRequests QuoteRequest[]
   createdAt DateTime @default(now())
 }
 model CustomerContact {
@@ -154,6 +175,7 @@ model StaffProfile {
   fullName String
   active Boolean @default(true)
   assignments DeliveryAssignment[]
+  quoteRequestsAssigned QuoteRequest[] @relation("QuoteRequestAssignee")
 }
 model Role {
   id String @id @default(cuid())
@@ -247,6 +269,62 @@ model ShipmentAddress {
   postalCode String?
   @@index([shipmentId, kind])
 }
+
+model QuoteRequest {
+  id String @id @default(cuid())
+  requestNumber String @unique
+  customerId String
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  idempotencyKey String? @db.VarChar(64)
+  mode ShipmentMode
+  destinationCountryCode String
+  destinationCity String
+  status QuoteRequestStatus @default(REQUESTED)
+  assignedToStaffId String?
+  assignedTo StaffProfile? @relation("QuoteRequestAssignee", fields: [assignedToStaffId], references: [id], onDelete: SetNull)
+  assignedAt DateTime?
+  requestSnapshot Json
+  resultQuote Quote? @relation("QuoteRequestResult")
+  history QuoteRequestHistory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([customerId, idempotencyKey])
+  @@index([status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([assignedToStaffId, status, createdAt])
+}
+
+model QuoteOutboxEvent {
+  id String @id @default(cuid())
+  eventKey String @unique
+  type QuoteOutboxType
+  aggregateId String
+  payload Json
+  status QuoteOutboxStatus @default(PENDING)
+  attempts Int @default(0)
+  availableAt DateTime @default(now())
+  lockedAt DateTime?
+  processedAt DateTime?
+  lastError String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, availableAt, createdAt])
+  @@index([aggregateId, createdAt])
+}
+
+model QuoteRequestHistory {
+  id String @id @default(cuid())
+  requestId String
+  request QuoteRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actorUserId String?
+  actor User? @relation("QuoteRequestHistoryActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  action String
+  metadata Json?
+  createdAt DateTime @default(now())
+  @@index([requestId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
 model TrackingReference {
   id String @id @default(cuid())
   shipmentId String @unique
@@ -420,6 +498,8 @@ model RateRule {
 model Quote {
   id String @id @default(cuid())
   quoteNumber String @unique
+  quoteRequestId String? @unique
+  quoteRequest QuoteRequest? @relation("QuoteRequestResult", fields: [quoteRequestId], references: [id], onDelete: Restrict)
   customerId String
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
   rateRuleId String

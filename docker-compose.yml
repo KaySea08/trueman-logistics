@@ -20,6 +20,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
     ports:
       - "${API_PORT:-3000}:3000"
     environment:
@@ -43,6 +44,55 @@ services:
       - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD:-}
       - BOOTSTRAP_ADMIN_NAME=${BOOTSTRAP_ADMIN_NAME:-}
       - BOOTSTRAP_ADMIN_EMPLOYEE_CODE=${BOOTSTRAP_ADMIN_EMPLOYEE_CODE:-}
+      - QUOTE_OFFICER_EMAIL=${QUOTE_OFFICER_EMAIL:-}
+      - QUOTE_WORKER_ENABLED=false
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - /workspace/apps/api/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  quote-worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["npm", "run", "start:quote-worker"]
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-trueman_app}:${POSTGRES_PASSWORD:-change_this_local_password}@postgres:5432/${POSTGRES_DB:-trueman_logistics}?schema=public
+      - REDIS_URL=redis://redis:6379
+      - AUTH_PEPPER=${AUTH_PEPPER:-}
+      - MFA_ENCRYPTION_KEY=${MFA_ENCRYPTION_KEY:-}
+      - SMTP_HOST=${SMTP_HOST:-mailpit}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-Trueman Logistics <no-reply@trueman.local>}
+      - QUOTE_WORKER_ENABLED=true
+      - QUOTE_OUTBOX_CONCURRENCY=${QUOTE_OUTBOX_CONCURRENCY:-8}
+      - QUOTE_OUTBOX_POLL_MS=${QUOTE_OUTBOX_POLL_MS:-500}
+      - QUOTE_OUTBOX_MAX_ATTEMPTS=${QUOTE_OUTBOX_MAX_ATTEMPTS:-8}
+      - QUOTE_OUTBOX_LEASE_MS=${QUOTE_OUTBOX_LEASE_MS:-60000}
+      - QUOTE_OUTBOX_BATCH_SIZE=${QUOTE_OUTBOX_BATCH_SIZE:-8}
     volumes:
       - ./apps/api:/workspace/apps/api
       - /workspace/apps/api/node_modules

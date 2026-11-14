@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Lenis from "lenis";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -23,10 +24,12 @@ import {
 import Brand from "./components/Brand";
 import TrackingForm from "./components/TrackingForm";
 import { services } from "./data/services";
-import CustomerAccess from "./components/CustomerAccess";
+import LoginDialog from "./components/CustomerAccess";
+import CustomerDashboard from "./components/CustomerDashboard";
 import ServiceInquiry from "./components/ServiceInquiry";
 import ShipmentQuote from "./components/ShipmentQuote";
 import AdminDashboard from "./AdminDashboard";
+import { useAuth } from "./auth/AuthContext";
 
 const supportPhone = import.meta.env.VITE_SUPPORT_PHONE as string | undefined;
 const supportWhatsApp = import.meta.env.VITE_SUPPORT_WHATSAPP as
@@ -71,10 +74,10 @@ const benefits = [
 ];
 
 function Header({
-  onAccount,
+  accountHref,
   onQuote,
 }: {
-  onAccount: () => void;
+  accountHref: string;
   onQuote: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -117,17 +120,25 @@ function Header({
               </a>
             ))}
           </nav>
-          <a className="nav-admin" href="/admin" aria-label="Admin dashboard">
+          <a
+            className="nav-admin"
+            href="/admin"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Admin dashboard"
+          >
             Admin
           </a>
-          <button
+          <a
             className="btn btn-outline nav-account"
-            onClick={onAccount}
+            href={accountHref}
+            target="_blank"
+            rel="noopener noreferrer"
             aria-label="Customer login"
           >
             <UserRound size={15} />
             <span>Customer login</span>
-          </button>
+          </a>
           <button className="btn btn-primary nav-quote" onClick={onQuote}>
             Get a quote <ArrowRight size={15} />
           </button>
@@ -911,7 +922,9 @@ function Footer({ onInquiry }: { onInquiry: (service: string) => void }) {
             © {new Date().getFullYear()} Trueman Logistics. All rights reserved.
           </span>
           <span>China origin · Worldwide destinations</span>
-          <a href="/admin">Staff portal</a>
+          <a href="/admin" target="_blank" rel="noopener noreferrer">
+            Staff portal
+          </a>
           <a href="#home">Back to top ↑</a>
         </div>
       </div>
@@ -920,9 +933,65 @@ function Footer({ onInquiry }: { onInquiry: (service: string) => void }) {
 }
 
 export default function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, loading, setReturnTo } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [dashboardLoginDismissed, setDashboardLoginDismissed] = useState(false);
   const [inquiryService, setInquiryService] = useState<string | null>(null);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const openQuote = useCallback(() => setQuoteOpen(true), []);
+
+  function openLogin(returnTo = "/dashboard") {
+    setReturnTo(returnTo);
+    setDashboardLoginDismissed(false);
+    setAccountOpen(true);
+  }
+
+  function closeLogin() {
+    setAccountOpen(false);
+    if (location.pathname === "/dashboard" && !user) {
+      setDashboardLoginDismissed(true);
+    }
+  }
+
+  function requestQuote() {
+    if (user) openQuote();
+    else openLogin("/dashboard?intent=quote");
+  }
+
+  useEffect(() => {
+    if (
+      location.pathname !== "/dashboard" ||
+      loading ||
+      user ||
+      accountOpen ||
+      dashboardLoginDismissed
+    )
+      return;
+    setReturnTo(`${location.pathname}${location.search}`);
+    setAccountOpen(true);
+  }, [
+    accountOpen,
+    dashboardLoginDismissed,
+    loading,
+    location.pathname,
+    location.search,
+    setReturnTo,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (location.pathname !== "/customer/login" || loading || accountOpen)
+      return;
+    if (user?.roles.includes("CUSTOMER")) {
+      navigate("/dashboard", { replace: true });
+      return;
+    }
+    setReturnTo("/dashboard");
+    setAccountOpen(true);
+  }, [accountOpen, loading, location.pathname, navigate, setReturnTo, user]);
+
   useEffect(() => {
     if (window.location.pathname.startsWith("/admin")) return;
 
@@ -936,22 +1005,71 @@ export default function App() {
     return () => lenis.destroy();
   }, []);
 
-  if (window.location.pathname.startsWith("/admin")) return <AdminDashboard />;
+  if (location.pathname.startsWith("/admin")) return <AdminDashboard />;
+
+  if (location.pathname === "/dashboard") {
+    if (loading) {
+      return (
+        <main className="customer-dashboard-gate" aria-live="polite">
+          <div className="customer-dashboard-gate-content">
+            <span className="customer-dashboard-spinner" />
+            <p>Checking your secure session…</p>
+          </div>
+        </main>
+      );
+    }
+    if (!user) {
+      return (
+        <main className="customer-dashboard-gate">
+          <div className="customer-dashboard-gate-content">
+            <h1>Sign in to your account</h1>
+            <p>Your shipments and quotations are available after sign-in.</p>
+            <button
+              className="btn btn-primary"
+              onClick={() =>
+                openLogin(`${location.pathname}${location.search}`)
+              }
+            >
+              Sign in <ArrowRight size={16} />
+            </button>
+          </div>
+          {accountOpen && <LoginDialog onClose={closeLogin} />}
+        </main>
+      );
+    }
+    if (!user.roles.includes("CUSTOMER"))
+      return <Navigate to="/admin" replace />;
+
+    return (
+      <>
+        <CustomerDashboard onOpenQuote={openQuote} />
+        {quoteOpen && (
+          <ShipmentQuote
+            onClose={() => setQuoteOpen(false)}
+            onLogin={() => openLogin("/dashboard?intent=quote")}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <Header
-        onAccount={() => setAccountOpen(true)}
-        onQuote={() => setQuoteOpen(true)}
+        accountHref={
+          user?.roles.includes("CUSTOMER") ? "/dashboard" : "/customer/login"
+        }
+        onQuote={requestQuote}
       />
       <main>
-        <Hero onQuote={() => setQuoteOpen(true)} />
+        <Hero onQuote={requestQuote} />
         <Services onInquiry={setInquiryService} />
         <TrackingSection />
         <Destinations />
         <About onInquiry={setInquiryService} />
       </main>
       <Footer onInquiry={setInquiryService} />
-      {accountOpen && <CustomerAccess onClose={() => setAccountOpen(false)} />}
+      {accountOpen && <LoginDialog onClose={closeLogin} />}
       {inquiryService && (
         <ServiceInquiry
           service={inquiryService}
@@ -961,7 +1079,7 @@ export default function App() {
       {quoteOpen && (
         <ShipmentQuote
           onClose={() => setQuoteOpen(false)}
-          onLogin={() => setAccountOpen(true)}
+          onLogin={() => openLogin("/dashboard?intent=quote")}
         />
       )}
       <div className="support-fab" aria-label="Customer support">

@@ -3,15 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start:dev": "nest start --watch",
+    "start:dev": "prisma generate && nest start --watch",
+    "start:quote-worker": "nest build && node dist/quotes/quote-worker.js",
+    "start:quote-worker:prod": "node dist/quotes/quote-worker.js",
     "build": "nest build",
     "typecheck": "tsc --noEmit",
+    "test:quotes": "tsx --test src/quotes/quotes.service.spec.ts",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:admin": "tsx scripts/bootstrap-admin.ts"
+    "db:admin": "tsx scripts/bootstrap-admin.ts",
+    "db:grant-quote-officer": "tsx scripts/grant-quote-officer.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

@@ -17,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import Brand from "./components/Brand";
+import AdminQuoteRequests from "./components/AdminQuoteRequests";
 import "./admin.css";
 
 const API =
@@ -102,6 +103,7 @@ type ActivityItem = {
     staff: { fullName: string; employeeCode: string } | null;
   } | null;
 };
+type StaffSession = { permissions: string[] };
 
 const shipmentStatuses = [
   "ORDER_RECEIVED",
@@ -194,8 +196,16 @@ export default function AdminDashboard() {
   const [eventStatus, setEventStatus] = useState("ORDER_CONFIRMED");
   const [eventLocation, setEventLocation] = useState("");
   const [eventNote, setEventNote] = useState("");
-  const [tab, setTab] = useState<"shipments" | "activity">("shipments");
+  const [tab, setTab] = useState<"shipments" | "quotes" | "activity">(
+    "shipments",
+  );
   const [refreshing, setRefreshing] = useState(false);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const canAccessOperations = permissions.includes("shipments:manage");
+  const canAccessQuotes =
+    permissions.includes("quotes:manage") ||
+    permissions.includes("rates:manage");
+  const canManageAllQuotes = permissions.includes("rates:manage");
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: "1", pageSize: "50" });
@@ -207,6 +217,7 @@ export default function AdminDashboard() {
   }, [search, reviewFilter, statusFilter, sourceFilter]);
 
   const loadDashboard = useCallback(async () => {
+    if (!permissions.includes("shipments:manage")) return;
     setRefreshing(true);
     try {
       const [stats, rows, people, actions] = await Promise.all([
@@ -234,14 +245,44 @@ export default function AdminDashboard() {
     } finally {
       setRefreshing(false);
     }
-  }, [query]);
+  }, [permissions, query]);
+
+  async function enterWorkspace() {
+    const session = await api<StaffSession>("/auth/me");
+    const nextPermissions = session.permissions ?? [];
+    const hasOperations = nextPermissions.includes("shipments:manage");
+    const hasQuotes =
+      nextPermissions.includes("quotes:manage") ||
+      nextPermissions.includes("rates:manage");
+    if (!hasOperations && !hasQuotes) {
+      setError("This staff account has no operations or quote permissions.");
+      setMode("login");
+      return;
+    }
+    setPermissions(nextPermissions);
+    setTab(hasOperations ? "shipments" : "quotes");
+    setMode("dashboard");
+  }
 
   useEffect(() => {
     let active = true;
-    api<Summary>("/admin/operations/summary")
-      .then(async (stats) => {
+    api<StaffSession>("/auth/me")
+      .then((session) => {
         if (!active) return;
-        setSummary(stats);
+        const nextPermissions = session.permissions ?? [];
+        const hasOperations = nextPermissions.includes("shipments:manage");
+        const hasQuotes =
+          nextPermissions.includes("quotes:manage") ||
+          nextPermissions.includes("rates:manage");
+        if (!hasOperations && !hasQuotes) {
+          setError(
+            "This staff account has no operations or quote permissions.",
+          );
+          setMode("login");
+          return;
+        }
+        setPermissions(nextPermissions);
+        setTab(hasOperations ? "shipments" : "quotes");
         setMode("dashboard");
       })
       .catch(() => {
@@ -253,8 +294,8 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (mode === "dashboard") void loadDashboard();
-  }, [mode, loadDashboard]);
+    if (mode === "dashboard" && canAccessOperations) void loadDashboard();
+  }, [canAccessOperations, mode, loadDashboard]);
 
   async function beginStaffSetup() {
     const setup = await api<{ qrCodeDataUrl: string; recoveryCodes: string[] }>(
@@ -284,9 +325,7 @@ export default function AdminDashboard() {
         setChallenge(result.challenge);
         setMode("mfa");
       } else if (result.mfaSetupRequired) await beginStaffSetup();
-      else {
-        setMode("dashboard");
-      }
+      else await enterWorkspace();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed.");
     } finally {
@@ -303,7 +342,7 @@ export default function AdminDashboard() {
         method: "POST",
         body: JSON.stringify({ challenge, code }),
       });
-      setMode("dashboard");
+      await enterWorkspace();
       setCode("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "MFA verification failed.");
@@ -321,7 +360,7 @@ export default function AdminDashboard() {
         method: "POST",
         body: JSON.stringify({ code }),
       });
-      setMode("dashboard");
+      await enterWorkspace();
       setCode("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not enable MFA.");
@@ -439,6 +478,7 @@ export default function AdminDashboard() {
     }
     setSelected(null);
     setSummary(null);
+    setPermissions([]);
     setMode("login");
   }
 
@@ -467,7 +507,7 @@ export default function AdminDashboard() {
           </span>
           <h1>
             {mode === "login"
-              ? "Administrator portal"
+              ? "Staff portal"
               : mode === "mfa"
                 ? "Verify your identity"
                 : "Secure your staff account"}
@@ -594,18 +634,30 @@ export default function AdminDashboard() {
           </b>
         </a>
         <div className="admin-side-label">WORKSPACE</div>
-        <button
-          className={tab === "shipments" ? "active" : ""}
-          onClick={() => setTab("shipments")}
-        >
-          <ClipboardList size={17} /> Operations
-        </button>
-        <button
-          className={tab === "activity" ? "active" : ""}
-          onClick={() => setTab("activity")}
-        >
-          <Activity size={17} /> Staff activity
-        </button>
+        {canAccessOperations && (
+          <button
+            className={tab === "shipments" ? "active" : ""}
+            onClick={() => setTab("shipments")}
+          >
+            <ClipboardList size={17} /> Operations
+          </button>
+        )}
+        {canAccessQuotes && (
+          <button
+            className={tab === "quotes" ? "active" : ""}
+            onClick={() => setTab("quotes")}
+          >
+            <ClipboardList size={17} /> Quote requests
+          </button>
+        )}
+        {canAccessOperations && (
+          <button
+            className={tab === "activity" ? "active" : ""}
+            onClick={() => setTab("activity")}
+          >
+            <Activity size={17} /> Staff activity
+          </button>
+        )}
         <div className="admin-side-bottom">
           <div className="admin-secure-state">
             <span /> Secure session active
@@ -625,16 +677,21 @@ export default function AdminDashboard() {
             <h1>
               {tab === "shipments"
                 ? "Shipment Operations Centre"
-                : "Staff activity"}
+                : tab === "quotes"
+                  ? "Customer quote requests"
+                  : "Staff activity"}
             </h1>
           </div>
-          <button
-            className="admin-refresh"
-            onClick={() => void loadDashboard()}
-            disabled={refreshing}
-          >
-            <RefreshCw size={16} className={refreshing ? "spin" : ""} /> Refresh
-          </button>
+          {tab !== "quotes" && (
+            <button
+              className="admin-refresh"
+              onClick={() => void loadDashboard()}
+              disabled={refreshing}
+            >
+              <RefreshCw size={16} className={refreshing ? "spin" : ""} />
+              Refresh
+            </button>
+          )}
         </header>
         {error && (
           <div className="admin-banner-error">
@@ -645,7 +702,7 @@ export default function AdminDashboard() {
             </button>
           </div>
         )}
-        {summary && (
+        {summary && tab !== "quotes" && (
           <section className="admin-stat-grid">
             <article>
               <span>
@@ -841,6 +898,8 @@ export default function AdminDashboard() {
               </span>
             </div>
           </>
+        ) : tab === "quotes" ? (
+          <AdminQuoteRequests canManageAll={canManageAllQuotes} />
         ) : (
           <section className="admin-panel">
             <div className="admin-panel-heading">
