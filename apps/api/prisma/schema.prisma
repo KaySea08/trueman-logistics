@@ -133,6 +133,7 @@ model User {
   phoneVerifiedAt DateTime?
   status UserStatus @default(INVITED)
   mfaEnabled Boolean @default(false)
+  mustChangePassword Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   customer Customer?
@@ -174,8 +175,29 @@ model StaffProfile {
   employeeCode String @unique
   fullName String
   active Boolean @default(true)
+  jobTitle String?
+  departmentId String?
+  department Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: Restrict)
+  supervisorId String?
+  supervisor StaffProfile? @relation("StaffReporting", fields: [supervisorId], references: [id], onDelete: Restrict)
+  reports StaffProfile[] @relation("StaffReporting")
+  departmentsHeaded Department[] @relation("DepartmentHead")
   assignments DeliveryAssignment[]
   quoteRequestsAssigned QuoteRequest[] @relation("QuoteRequestAssignee")
+  @@index([departmentId, active, fullName])
+  @@index([supervisorId])
+}
+model Department {
+  id String @id @default(cuid())
+  name String @unique
+  description String?
+  active Boolean @default(true)
+  headId String?
+  head StaffProfile? @relation("DepartmentHead", fields: [headId], references: [id], onDelete: Restrict)
+  members StaffProfile[] @relation("DepartmentMembers")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([active, name])
 }
 model Role {
   id String @id @default(cuid())

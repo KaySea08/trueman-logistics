@@ -3,21 +3,27 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  Building2,
   CheckCircle2,
   ClipboardList,
   Clock3,
   Eye,
   EyeOff,
   LogOut,
+  LockKeyhole,
   Package,
   RefreshCw,
   Search,
   ShieldCheck,
   Truck,
+  Users,
   XCircle,
 } from "lucide-react";
 import Brand from "./components/Brand";
 import AdminQuoteRequests from "./components/AdminQuoteRequests";
+import AdminStaffDirectory from "./components/AdminStaffDirectory";
+import AdminDepartments from "./components/AdminDepartments";
+import AdminAccountSecurity from "./components/AdminAccountSecurity";
 import "./admin.css";
 
 const API =
@@ -103,7 +109,11 @@ type ActivityItem = {
     staff: { fullName: string; employeeCode: string } | null;
   } | null;
 };
-type StaffSession = { permissions: string[] };
+type StaffSession = {
+  permissions: string[];
+  roles: string[];
+  mustChangePassword: boolean;
+};
 
 const shipmentStatuses = [
   "ORDER_RECEIVED",
@@ -171,7 +181,7 @@ function statusClass(value: string) {
 
 export default function AdminDashboard() {
   const [mode, setMode] = useState<
-    "checking" | "login" | "mfa" | "setup" | "dashboard"
+    "checking" | "login" | "verify" | "mfa" | "setup" | "dashboard"
   >("checking");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -196,16 +206,25 @@ export default function AdminDashboard() {
   const [eventStatus, setEventStatus] = useState("ORDER_CONFIRMED");
   const [eventLocation, setEventLocation] = useState("");
   const [eventNote, setEventNote] = useState("");
-  const [tab, setTab] = useState<"shipments" | "quotes" | "activity">(
-    "shipments",
-  );
+  const [tab, setTab] = useState<
+    "shipments" | "quotes" | "activity" | "staff" | "departments" | "account"
+  >("shipments");
   const [refreshing, setRefreshing] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const canAccessOperations = permissions.includes("shipments:manage");
+  const [roles, setRoles] = useState<string[]>([]);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [loginNotice, setLoginNotice] = useState("");
+  const canAccessOperations =
+    !mustChangePassword && permissions.includes("shipments:manage");
   const canAccessQuotes =
-    permissions.includes("quotes:manage") ||
-    permissions.includes("rates:manage");
+    !mustChangePassword &&
+    (permissions.includes("quotes:manage") ||
+      permissions.includes("rates:manage"));
   const canManageAllQuotes = permissions.includes("rates:manage");
+  const canManageStaff =
+    !mustChangePassword && permissions.includes("staff:manage");
+  const canManageDepartments =
+    !mustChangePassword && permissions.includes("system:manage");
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: "1", pageSize: "50" });
@@ -247,21 +266,41 @@ export default function AdminDashboard() {
     }
   }, [permissions, query]);
 
-  async function enterWorkspace() {
-    const session = await api<StaffSession>("/auth/me");
+  function applySession(session: StaffSession) {
     const nextPermissions = session.permissions ?? [];
+    const nextRoles = session.roles ?? [];
+    if (!nextRoles.some((role) => role !== "CUSTOMER")) {
+      setError("A staff account is required.");
+      setMode("login");
+      return;
+    }
     const hasOperations = nextPermissions.includes("shipments:manage");
     const hasQuotes =
       nextPermissions.includes("quotes:manage") ||
       nextPermissions.includes("rates:manage");
-    if (!hasOperations && !hasQuotes) {
-      setError("This staff account has no operations or quote permissions.");
-      setMode("login");
-      return;
-    }
+    const hasStaff = nextPermissions.includes("staff:manage");
+    const hasDepartments = nextPermissions.includes("system:manage");
     setPermissions(nextPermissions);
-    setTab(hasOperations ? "shipments" : "quotes");
+    setRoles(nextRoles);
+    setMustChangePassword(Boolean(session.mustChangePassword));
+    setTab(
+      session.mustChangePassword
+        ? "account"
+        : hasOperations
+          ? "shipments"
+          : hasQuotes
+            ? "quotes"
+            : hasStaff
+              ? "staff"
+              : hasDepartments
+                ? "departments"
+                : "account",
+    );
     setMode("dashboard");
+  }
+
+  async function enterWorkspace() {
+    applySession(await api<StaffSession>("/auth/me"));
   }
 
   useEffect(() => {
@@ -269,21 +308,7 @@ export default function AdminDashboard() {
     api<StaffSession>("/auth/me")
       .then((session) => {
         if (!active) return;
-        const nextPermissions = session.permissions ?? [];
-        const hasOperations = nextPermissions.includes("shipments:manage");
-        const hasQuotes =
-          nextPermissions.includes("quotes:manage") ||
-          nextPermissions.includes("rates:manage");
-        if (!hasOperations && !hasQuotes) {
-          setError(
-            "This staff account has no operations or quote permissions.",
-          );
-          setMode("login");
-          return;
-        }
-        setPermissions(nextPermissions);
-        setTab(hasOperations ? "shipments" : "quotes");
-        setMode("dashboard");
+        applySession(session);
       })
       .catch(() => {
         if (active) setMode("login");
@@ -311,6 +336,7 @@ export default function AdminDashboard() {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setLoginNotice("");
     try {
       const result = await api<{
         user?: { roles: string[] };
@@ -321,6 +347,7 @@ export default function AdminDashboard() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      setPassword("");
       if (result.mfaRequired && result.challenge) {
         setChallenge(result.challenge);
         setMode("mfa");
@@ -328,6 +355,57 @@ export default function AdminDashboard() {
       else await enterWorkspace();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyEmail(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setLoginNotice("");
+    try {
+      const result = await api<{ message: string }>("/auth/verify-email", {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      });
+      setCode("");
+      setMode("login");
+      setLoginNotice(result.message);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not verify your email.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    if (!email.trim()) {
+      setError("Enter your email address first.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ message: string }>(
+        "/auth/resend-verification",
+        {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        },
+      );
+      setLoginNotice(result.message);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not request a verification code.",
+      );
     } finally {
       setBusy(false);
     }
@@ -479,6 +557,8 @@ export default function AdminDashboard() {
     setSelected(null);
     setSummary(null);
     setPermissions([]);
+    setRoles([]);
+    setMustChangePassword(false);
     setMode("login");
   }
 
@@ -492,7 +572,12 @@ export default function AdminDashboard() {
       </div>
     );
 
-  if (mode === "login" || mode === "mfa" || mode === "setup") {
+  if (
+    mode === "login" ||
+    mode === "verify" ||
+    mode === "mfa" ||
+    mode === "setup"
+  ) {
     return (
       <div className="admin-screen">
         <div className="admin-auth-card">
@@ -508,16 +593,20 @@ export default function AdminDashboard() {
           <h1>
             {mode === "login"
               ? "Staff portal"
-              : mode === "mfa"
-                ? "Verify your identity"
-                : "Secure your staff account"}
+              : mode === "verify"
+                ? "Verify staff email"
+                : mode === "mfa"
+                  ? "Verify your identity"
+                  : "Secure your staff account"}
           </h1>
           <p className="admin-auth-copy">
             {mode === "login"
               ? "Sign in with your authorised staff account. Access is controlled by your assigned permissions."
-              : mode === "mfa"
-                ? "Enter the current authenticator code to continue."
-                : "Scan the QR code with an authenticator app, save your recovery codes, then verify the setup."}
+              : mode === "verify"
+                ? "Enter the verification code sent to your email."
+                : mode === "mfa"
+                  ? "Enter the current authenticator code to continue."
+                  : "Scan the QR code with an authenticator app, save your recovery codes, then verify the setup."}
           </p>
           {mode === "login" && (
             <form className="admin-form" onSubmit={login}>
@@ -557,6 +646,65 @@ export default function AdminDashboard() {
               </label>
               <button className="admin-primary" disabled={busy}>
                 {busy ? "Signing in…" : "Sign in securely"}
+              </button>
+              <button
+                type="button"
+                className="admin-secondary"
+                onClick={() => {
+                  setError("");
+                  setLoginNotice("");
+                  setMode("verify");
+                }}
+              >
+                Verify staff email
+              </button>
+            </form>
+          )}
+          {mode === "verify" && (
+            <form className="admin-form" onSubmit={verifyEmail}>
+              <label>
+                Email address
+                <input
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </label>
+              <label>
+                Verification code
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
+              </label>
+              <button className="admin-primary" disabled={busy}>
+                {busy ? "Verifying..." : "Verify email"}
+              </button>
+              <button
+                type="button"
+                className="admin-secondary"
+                disabled={busy}
+                onClick={() => void resendVerification()}
+              >
+                Resend verification code
+              </button>
+              <button
+                type="button"
+                className="admin-secondary"
+                onClick={() => {
+                  setError("");
+                  setLoginNotice("");
+                  setMode("login");
+                }}
+              >
+                Back to sign in
               </button>
             </form>
           )}
@@ -613,6 +761,9 @@ export default function AdminDashboard() {
               {error}
             </p>
           )}
+          {(mode === "login" || mode === "verify") && loginNotice && (
+            <p role="status">{loginNotice}</p>
+          )}
           <div className="admin-auth-foot">
             <ShieldCheck size={15} /> Protected staff access · Activity is
             audited
@@ -658,6 +809,28 @@ export default function AdminDashboard() {
             <Activity size={17} /> Staff activity
           </button>
         )}
+        {canManageStaff && (
+          <button
+            className={tab === "staff" ? "active" : ""}
+            onClick={() => setTab("staff")}
+          >
+            <Users size={17} /> Staff directory
+          </button>
+        )}
+        {canManageDepartments && (
+          <button
+            className={tab === "departments" ? "active" : ""}
+            onClick={() => setTab("departments")}
+          >
+            <Building2 size={17} /> Departments
+          </button>
+        )}
+        <button
+          className={tab === "account" ? "active" : ""}
+          onClick={() => setTab("account")}
+        >
+          <LockKeyhole size={17} /> Account security
+        </button>
         <div className="admin-side-bottom">
           <div className="admin-secure-state">
             <span /> Secure session active
@@ -679,10 +852,16 @@ export default function AdminDashboard() {
                 ? "Shipment Operations Centre"
                 : tab === "quotes"
                   ? "Customer quote requests"
-                  : "Staff activity"}
+                  : tab === "staff"
+                    ? "Staff directory"
+                    : tab === "departments"
+                      ? "Departments"
+                      : tab === "account"
+                        ? "Account security"
+                        : "Staff activity"}
             </h1>
           </div>
-          {tab !== "quotes" && (
+          {(tab === "shipments" || tab === "activity") && (
             <button
               className="admin-refresh"
               onClick={() => void loadDashboard()}
@@ -702,7 +881,7 @@ export default function AdminDashboard() {
             </button>
           </div>
         )}
-        {summary && tab !== "quotes" && (
+        {summary && (tab === "shipments" || tab === "activity") && (
           <section className="admin-stat-grid">
             <article>
               <span>
@@ -900,6 +1079,24 @@ export default function AdminDashboard() {
           </>
         ) : tab === "quotes" ? (
           <AdminQuoteRequests canManageAll={canManageAllQuotes} />
+        ) : tab === "staff" ? (
+          <AdminStaffDirectory
+            canCreate={roles.includes("SUPER_ADMINISTRATOR")}
+          />
+        ) : tab === "departments" ? (
+          <AdminDepartments />
+        ) : tab === "account" ? (
+          <AdminAccountSecurity
+            required={mustChangePassword}
+            onChanged={() => {
+              setPermissions([]);
+              setRoles([]);
+              setMustChangePassword(false);
+              setPassword("");
+              setLoginNotice("Password changed. Sign in again.");
+              setMode("login");
+            }}
+          />
         ) : (
           <section className="admin-panel">
             <div className="admin-panel-heading">

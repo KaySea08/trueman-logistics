@@ -24,6 +24,10 @@ export class VerifyCodeDto {
 export class ResetPasswordDto extends VerifyCodeDto {
   @IsString() @MinLength(12) @MaxLength(100) newPassword!: string;
 }
+export class ChangePasswordDto {
+  @IsString() @MinLength(1) @MaxLength(100) currentPassword!: string;
+  @IsString() @MinLength(12) @MaxLength(100) newPassword!: string;
+}
 export class MfaVerifyDto {
   @Matches(/^\d{6}$/) code!: string;
 }

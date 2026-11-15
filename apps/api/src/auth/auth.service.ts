@@ -197,7 +197,7 @@ export class AuthService {
     const email = emailInput.trim().toLowerCase();
     await this.throttle(`verify-email:${email}`, 8, 300);
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user)
+    if (!user || user.status !== "INVITED" || user.emailVerifiedAt)
       throw new BadRequestException("Invalid or expired verification code.");
     const challenge = await this.prisma.verificationChallenge.findFirst({
       where: {
@@ -216,14 +216,16 @@ export class AuthService {
       challenge.id,
       Buffer.from(challenge.codeDigest, "hex"),
     );
-    await this.prisma.verificationChallenge.update({
-      where: { id: challenge.id },
-      data: {
-        attempts: { increment: 1 },
-        ...(valid ? { consumedAt: new Date() } : {}),
-      },
-    });
     if (!valid) {
+      await this.prisma.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          consumedAt: null,
+          attempts: { lt: 5 },
+          expiresAt: { gt: new Date() },
+        },
+        data: { attempts: { increment: 1 } },
+      });
       await this.audit.record({
         actorUserId: user.id,
         action: "EMAIL_VERIFICATION_FAILED",
@@ -233,10 +235,29 @@ export class AuthService {
       });
       throw new BadRequestException("Invalid or expired verification code.");
     }
-    const verifiedUser = await this.prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerifiedAt: new Date(), status: "ACTIVE" },
-      include: { customer: true },
+    const verifiedUser = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          consumedAt: null,
+          attempts: { lt: 5 },
+          expiresAt: { gt: now },
+        },
+        data: { attempts: { increment: 1 }, consumedAt: now },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException("Invalid or expired verification code.");
+      const activated = await tx.user.updateMany({
+        where: { id: user.id, status: "INVITED", emailVerifiedAt: null },
+        data: { emailVerifiedAt: now, status: "ACTIVE" },
+      });
+      if (activated.count !== 1)
+        throw new BadRequestException("Invalid or expired verification code.");
+      return tx.user.findUniqueOrThrow({
+        where: { id: user.id },
+        include: { customer: true },
+      });
     });
     if (verifiedUser.customer && verifiedUser.email)
       await this.prisma.customerContact.upsert({
@@ -270,11 +291,34 @@ export class AuthService {
     await this.throttle(`resend:email:${email}`, 3, 900);
     await this.throttle(`resend:ip:${digest(ip)}`, 10, 900);
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (user && !user.emailVerifiedAt)
+    if (user && user.status === "INVITED" && !user.emailVerifiedAt)
       await this.issueCode(user.id, email, "EMAIL_VERIFICATION");
     return {
       message: "If the account needs verification, a new code has been sent.",
     };
+  }
+
+  async sendStaffInvitation(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        emailVerifiedAt: true,
+        staff: { select: { id: true } },
+      },
+    });
+    if (
+      !user?.staff ||
+      !user.email ||
+      user.status !== "INVITED" ||
+      user.emailVerifiedAt
+    )
+      throw new BadRequestException(
+        "Staff account is not awaiting verification.",
+      );
+    await this.issueCode(user.id, user.email, "EMAIL_VERIFICATION");
   }
 
   async requestPhoneVerification(userId: string) {
@@ -405,27 +449,44 @@ export class AuthService {
     if (user.mfaEnabled)
       return {
         mfaRequired: true,
-        challenge: await this.issueMfaChallenge(user.id),
+        challenge: await this.issueMfaChallenge(user.id, user.passwordHash!),
       };
     const privileged = user.userRoles.some(
       (assignment) => assignment.role.name !== "CUSTOMER",
     );
     return {
       user: this.publicUser(user),
-      sessionToken: await this.createSession(user.id),
+      sessionToken: await this.createSession(user.id, user.passwordHash!),
       ...(privileged ? { mfaSetupRequired: true } : {}),
     };
   }
-  private async issueMfaChallenge(userId: string) {
+  private async issueMfaChallenge(userId: string, passwordHash: string) {
     const token = randomBytes(32).toString("base64url");
-    await this.redis.set(`mfa-login:${digest(token)}`, userId, "EX", 300);
+    await this.redis.set(
+      `mfa-login:${digest(token)}`,
+      JSON.stringify({ userId, passwordFingerprint: digest(passwordHash) }),
+      "EX",
+      300,
+    );
     return token;
   }
   async completeMfaLogin(challenge: string, code: string) {
     await this.throttle(`mfa-login:${digest(challenge)}`, 5, 300);
     const key = `mfa-login:${digest(challenge)}`;
-    const userId = await this.redis.get(key);
-    if (!userId) throw new UnauthorizedException("MFA challenge expired.");
+    const stored = await this.redis.get(key);
+    if (!stored) throw new UnauthorizedException("MFA challenge expired.");
+    let payload: { userId?: unknown; passwordFingerprint?: unknown };
+    try {
+      payload = JSON.parse(stored) as typeof payload;
+      if (
+        typeof payload.userId !== "string" ||
+        typeof payload.passwordFingerprint !== "string"
+      )
+        throw new Error("Invalid challenge");
+    } catch {
+      throw new UnauthorizedException("MFA challenge expired.");
+    }
+    const userId = payload.userId as string;
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -434,7 +495,13 @@ export class AuthService {
         customer: true,
       },
     });
-    if (!user?.mfaConfiguration)
+    if (
+      !user?.mfaConfiguration ||
+      user.status !== "ACTIVE" ||
+      !user.mfaEnabled ||
+      !user.passwordHash ||
+      digest(user.passwordHash) !== payload.passwordFingerprint
+    )
       throw new UnauthorizedException("MFA is not configured.");
     const secret = this.decryptSecret(user.mfaConfiguration.encryptedSecret);
     const validTotp = authenticator.check(code, secret);
@@ -443,18 +510,26 @@ export class AuthService {
     );
     if (!validTotp && recoveryIndex < 0)
       throw new UnauthorizedException("Invalid MFA code.");
-    if (recoveryIndex >= 0) {
+    if ((await this.redis.del(key)) !== 1)
+      throw new UnauthorizedException("MFA challenge expired.");
+    if (!validTotp && recoveryIndex >= 0) {
       const codes = [...user.mfaConfiguration.recoveryCodeDigests];
       codes.splice(recoveryIndex, 1);
-      await this.prisma.mfaConfiguration.update({
-        where: { userId },
+      const consumed = await this.prisma.mfaConfiguration.updateMany({
+        where: {
+          userId,
+          recoveryCodeDigests: {
+            equals: user.mfaConfiguration.recoveryCodeDigests,
+          },
+        },
         data: { recoveryCodeDigests: codes },
       });
+      if (consumed.count !== 1)
+        throw new UnauthorizedException("Invalid MFA code.");
     }
-    await this.redis.del(key);
     return {
       user: this.publicUser(user),
-      sessionToken: await this.createSession(user.id),
+      sessionToken: await this.createSession(user.id, user.passwordHash),
     };
   }
   private publicUser(user: any) {
@@ -468,22 +543,35 @@ export class AuthService {
         : null,
       roles: user.userRoles?.map((x: any) => x.role.name) ?? [],
       mfaEnabled: user.mfaEnabled,
+      mustChangePassword: user.mustChangePassword,
     };
   }
-  private async createSession(userId: string) {
+  private async createSession(userId: string, expectedPasswordHash: string) {
     const raw = randomBytes(32).toString("base64url");
-    await this.prisma.session.create({
-      data: {
-        userId,
-        tokenDigest: digest(raw),
-        expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000),
-      },
-    });
-    await this.audit.record({
-      actorUserId: userId,
-      action: "SESSION_CREATED",
-      targetType: "Session",
-      outcome: "SUCCESS",
+    await this.prisma.$transaction(async (tx) => {
+      const users = await tx.$queryRaw<
+        Array<{ status: string; passwordHash: string | null }>
+      >`
+        SELECT "status", "passwordHash" FROM "User" WHERE "id" = ${userId} FOR UPDATE
+      `;
+      if (
+        users[0]?.status !== "ACTIVE" ||
+        users[0]?.passwordHash !== expectedPasswordHash
+      )
+        throw new UnauthorizedException("Credentials changed. Sign in again.");
+      await tx.session.create({
+        data: {
+          userId,
+          tokenDigest: digest(raw),
+          expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000),
+        },
+      });
+      await this.audit.recordInTransaction(tx, {
+        actorUserId: userId,
+        action: "SESSION_CREATED",
+        targetType: "Session",
+        outcome: "SUCCESS",
+      });
     });
     return raw;
   }
@@ -587,6 +675,57 @@ export class AuthService {
     });
     return { message: "Session revoked." };
   }
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    await this.throttle(`password-change:${digest(userId)}`, 5, 900);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true, status: true },
+    });
+    if (
+      !user?.passwordHash ||
+      user.status !== "ACTIVE" ||
+      !(await argon2
+        .verify(user.passwordHash, currentPassword)
+        .catch(() => false))
+    )
+      throw new UnauthorizedException("Current password is incorrect.");
+    if (currentPassword === newPassword)
+      throw new BadRequestException("Choose a different password.");
+    const passwordHash = await argon2.hash(newPassword, {
+      type: argon2.argon2id,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
+    });
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.updateMany({
+        where: {
+          id: userId,
+          status: "ACTIVE",
+          passwordHash: user.passwordHash,
+        },
+        data: { passwordHash, mustChangePassword: false },
+      });
+      if (updated.count !== 1)
+        throw new ConflictException("Your account changed. Sign in again.");
+      await tx.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.audit.recordInTransaction(tx, {
+        actorUserId: userId,
+        action: "PASSWORD_CHANGED",
+        targetType: "User",
+        targetId: userId,
+        outcome: "SUCCESS",
+      });
+    });
+    return { message: "Password changed. Sign in again." };
+  }
   async requestPasswordReset(emailInput: string, ip = "unknown") {
     const email = emailInput.trim().toLowerCase();
     await this.throttle(`reset:email:${email}`, 3, 900);
@@ -642,6 +781,7 @@ export class AuthService {
             timeCost: 2,
             parallelism: 1,
           }),
+          mustChangePassword: false,
         },
       }),
       this.prisma.session.updateMany({

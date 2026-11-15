@@ -22,6 +22,7 @@ import {
   EmailDto,
   MfaLoginDto,
   UpdateProfileDto,
+  ChangePasswordDto,
 } from "./auth.dto";
 import { SessionGuard } from "./session.guard";
 
@@ -82,6 +83,16 @@ export class AuthController {
   }
   @Post("password/reset") reset(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto.email, dto.code, dto.newPassword);
+  }
+  @UseGuards(SessionGuard)
+  @Header("Cache-Control", "no-store, private")
+  @Post("password/change")
+  changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(
+      (req as any).auth.user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
   }
   @UseGuards(SessionGuard)
   @Header("Cache-Control", "no-store, private")
