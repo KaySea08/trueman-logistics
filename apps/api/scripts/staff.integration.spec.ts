@@ -279,6 +279,58 @@ test(
           .status,
         403,
       );
+      const staff = await prisma.staffProfile.findFirstOrThrow({
+        where: { user: { email: staffEmail } },
+        select: { id: true },
+      });
+      const suspended = await request(
+        `/admin/staff/${staff.id}/status`,
+        "PATCH",
+        { action: "SUSPEND" },
+        adminLogin.cookie,
+      );
+      assert.equal(suspended.status, 200);
+      assert.equal(suspended.payload.status, "SUSPENDED");
+      assert.equal(
+        (await request("/auth/me", "GET", undefined, completed.cookie)).status,
+        401,
+      );
+      assert.equal(
+        (
+          await request("/auth/login", "POST", {
+            email: staffEmail,
+            password: nextPassword,
+          })
+        ).status,
+        401,
+      );
+      const reactivated = await request(
+        `/admin/staff/${staff.id}/status`,
+        "PATCH",
+        { action: "REACTIVATE" },
+        adminLogin.cookie,
+      );
+      assert.equal(reactivated.status, 200);
+      assert.equal(reactivated.payload.status, "ACTIVE");
+      assert.equal(
+        (await request("/auth/me", "GET", undefined, completed.cookie)).status,
+        401,
+      );
+      const adminProfile = await prisma.staffProfile.findFirstOrThrow({
+        where: { user: { email: adminEmail } },
+        select: { id: true },
+      });
+      assert.equal(
+        (
+          await request(
+            `/admin/staff/${adminProfile.id}/status`,
+            "PATCH",
+            { action: "SUSPEND" },
+            adminLogin.cookie,
+          )
+        ).status,
+        403,
+      );
     } finally {
       if (mailIds.length)
         await fetch("http://mailpit:8025/api/v1/messages", {

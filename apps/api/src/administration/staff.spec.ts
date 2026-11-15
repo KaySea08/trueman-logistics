@@ -158,7 +158,12 @@ test("suspending staff revokes sessions and records the change transactionally",
         return { count: 1 };
       },
     },
-    verificationChallenge: { updateMany: async () => { calls.push("challenges"); return { count: 0 }; } },
+    verificationChallenge: {
+      updateMany: async () => {
+        calls.push("challenges");
+        return { count: 0 };
+      },
+    },
   };
   const prisma = {
     $transaction: async (operation: (value: typeof tx) => Promise<unknown>) =>

@@ -155,7 +155,9 @@ export class StaffService {
             ? "SUSPENDED"
             : action === "DEACTIVATE"
               ? "DISABLED"
-              : staff.user.emailVerifiedAt ? "ACTIVE" : "INVITED";
+              : staff.user.emailVerifiedAt
+                ? "ACTIVE"
+                : "INVITED";
         const allowed =
           action === "SUSPEND"
             ? current === "ACTIVE"

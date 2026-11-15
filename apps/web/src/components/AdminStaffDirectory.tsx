@@ -83,11 +83,20 @@ export default function AdminStaffDirectory({
     setError("");
     setNotice("");
     try {
-      await apiRequest(`/admin/staff/${encodeURIComponent(person.id)}/status`, {
+      const result = await apiRequest<{
+        status: string;
+        invitationSent?: boolean;
+      }>(`/admin/staff/${encodeURIComponent(person.id)}/status`, {
         method: "PATCH",
         body: JSON.stringify({ action }),
       });
-      setNotice("Staff account status updated.");
+      setNotice(
+        result.status === "INVITED"
+          ? result.invitationSent
+            ? "Staff invitation renewed."
+            : "Account restored, but the verification email could not be sent. Resend verification."
+          : "Staff account status updated.",
+      );
       setRefresh((value) => value + 1);
     } catch (failure) {
       setError(
@@ -430,7 +439,8 @@ export default function AdminStaffDirectory({
                               Suspend
                             </button>
                           )}
-                          {(person.user.status === "ACTIVE" ||
+                          {(person.user.status === "INVITED" ||
+                            person.user.status === "ACTIVE" ||
                             person.user.status === "SUSPENDED") && (
                             <button
                               type="button"
