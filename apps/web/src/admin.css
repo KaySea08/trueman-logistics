@@ -101,6 +101,55 @@
   font-size: 12px;
   font-weight: 700;
 }
+.admin-form .admin-checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+}
+.admin-form .admin-checkbox-field input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  accent-color: var(--admin-action);
+}
+.admin-form-hint {
+  margin: -8px 0 0;
+  color: var(--admin-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.admin-staff-create-form > label {
+  width: 270px;
+  max-width: 100%;
+  justify-self: center;
+  text-align: center;
+}
+.admin-staff-create-form > .admin-checkbox-field {
+  justify-content: center;
+}
+.admin-staff-create-form input::placeholder {
+  color: #687789;
+  opacity: 1;
+  font-weight: 400;
+}
+.admin-staff-create-form select:invalid {
+  color: var(--admin-muted);
+  font-weight: 400;
+}
+.admin-staff-create-form > .admin-form-hint {
+  width: 270px;
+  max-width: 100%;
+  justify-self: center;
+  text-align: center;
+}
+.admin-staff-create-form > .admin-primary {
+  width: 270px;
+  max-width: 100%;
+  justify-self: center;
+}
 .admin-auth-card .admin-form > label {
   width: min(100%, 340px);
 }

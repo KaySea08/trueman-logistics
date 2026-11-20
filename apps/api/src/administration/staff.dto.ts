@@ -1,6 +1,7 @@
 import { Type } from "class-transformer";
 import {
   IsEnum,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsInt,
@@ -73,10 +74,15 @@ export class CreateStaffDto {
   @MaxLength(100)
   fullName!: string;
 
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  employeeCode!: string;
+  employeeCode?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  generateEmployeeCode?: boolean;
 
   @IsIn(STAFF_CREATE_ROLES)
   role!: (typeof STAFF_CREATE_ROLES)[number];

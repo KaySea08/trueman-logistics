@@ -62,9 +62,10 @@ export default function AdminStaffDirectory({
   const [showCreate, setShowCreate] = useState(false);
   const [fullName, setFullName] = useState("");
   const [employeeCode, setEmployeeCode] = useState("");
+  const [generateEmployeeCode, setGenerateEmployeeCode] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("SHIPMENT_OFFICER");
+  const [role, setRole] = useState("");
   const [creating, setCreating] = useState(false);
   const [busyStaffId, setBusyStaffId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -140,13 +141,17 @@ export default function AdminStaffDirectory({
     setError("");
     setNotice("");
     try {
-      const result = await apiRequest<{ invitationSent: boolean }>(
+      const result = await apiRequest<{
+        invitationSent: boolean;
+        user: { staff: { employeeCode: string } };
+      }>(
         "/admin/staff",
         {
           method: "POST",
           body: JSON.stringify({
             fullName,
-            employeeCode,
+            employeeCode: generateEmployeeCode ? undefined : employeeCode,
+            generateEmployeeCode,
             email,
             password,
             role,
@@ -156,12 +161,14 @@ export default function AdminStaffDirectory({
       setPassword("");
       setFullName("");
       setEmployeeCode("");
+      setGenerateEmployeeCode(true);
       setEmail("");
       setShowCreate(false);
+      const invitationMessage = result.invitationSent
+        ? "A verification code was sent; share the temporary password separately through a secure channel."
+        : "The verification email could not be sent. Ask the staff member to request another code.";
       setNotice(
-        result.invitationSent
-          ? "Staff account created. A verification code was sent; share the temporary password separately through a secure channel."
-          : "Staff account created, but the verification email could not be sent. Ask the staff member to request another code.",
+        `Staff account created with employee ID ${result.user.staff.employeeCode}. ${invitationMessage}`,
       );
       setPage(1);
       setRefresh((value) => value + 1);
@@ -242,27 +249,49 @@ export default function AdminStaffDirectory({
         </div>
       )}
       {showCreate && canCreate && (
-        <form className="admin-form" onSubmit={createStaff}>
+        <form
+          className="admin-form admin-staff-create-form"
+          onSubmit={createStaff}
+        >
           <label>
             Full name
             <input
               required
               minLength={2}
               maxLength={100}
+              placeholder="Enter the staff member's name"
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
             />
           </label>
-          <label>
-            Employee ID
+          <label className="admin-checkbox-field">
             <input
-              required
-              minLength={2}
-              maxLength={50}
-              value={employeeCode}
-              onChange={(event) => setEmployeeCode(event.target.value)}
+              type="checkbox"
+              checked={generateEmployeeCode}
+              onChange={(event) => {
+                setGenerateEmployeeCode(event.target.checked);
+                if (event.target.checked) setEmployeeCode("");
+              }}
             />
+            Generate employee ID automatically
           </label>
+          {generateEmployeeCode ? (
+            <p className="admin-form-hint">
+              A unique employee ID will be assigned when the account is created.
+            </p>
+          ) : (
+            <label>
+              Employee ID
+              <input
+                required
+                minLength={2}
+                maxLength={50}
+                placeholder="Enter an employee ID"
+                value={employeeCode}
+                onChange={(event) => setEmployeeCode(event.target.value)}
+              />
+            </label>
+          )}
           <label>
             Email (staff user ID)
             <input
@@ -270,6 +299,7 @@ export default function AdminStaffDirectory({
               required
               maxLength={254}
               autoComplete="off"
+              placeholder="staff@example.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
@@ -282,6 +312,7 @@ export default function AdminStaffDirectory({
               minLength={12}
               maxLength={100}
               autoComplete="new-password"
+              placeholder="At least 12 characters"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
@@ -289,9 +320,13 @@ export default function AdminStaffDirectory({
           <label>
             Role
             <select
+              required
               value={role}
               onChange={(event) => setRole(event.target.value)}
             >
+              <option value="" disabled>
+                Choose a staff role
+              </option>
               {staffRoles.map((item) => (
                 <option key={item} value={item}>
                   {display(item)}

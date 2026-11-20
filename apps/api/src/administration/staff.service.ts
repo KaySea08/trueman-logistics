@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import * as argon2 from "argon2";
 import { AuthService } from "../auth/auth.service";
@@ -23,10 +24,13 @@ export class StaffService {
   async create(actorUserId: string, input: CreateStaffDto) {
     const email = input.email.trim().toLowerCase();
     const fullName = input.fullName.trim();
-    const employeeCode = input.employeeCode.trim();
+    const employeeCode = input.generateEmployeeCode
+      ? `EMP-${randomUUID().toUpperCase()}`
+      : (input.employeeCode?.trim() ?? "");
     if (
       fullName.length < 2 ||
       employeeCode.length < 2 ||
+      employeeCode.length > 50 ||
       !STAFF_CREATE_ROLES.includes(input.role)
     )
       throw new BadRequestException(
