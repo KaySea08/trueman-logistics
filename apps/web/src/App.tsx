@@ -16,6 +16,7 @@ import {
   Mail,
   PackageCheck,
   PackageSearch,
+  Plane,
   Route,
   Phone,
   MessageCircle,
@@ -93,6 +94,39 @@ function Header({
   onQuote: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("home");
+
+  useEffect(() => {
+    let frame = 0;
+    const updateActiveSection = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        let current = nav[0].href.slice(1);
+
+        for (const item of nav) {
+          const section = document.getElementById(item.href.slice(1));
+          if (section && section.getBoundingClientRect().top <= 150) {
+            current = item.href.slice(1);
+          }
+        }
+
+        setActiveSection((previous) =>
+          previous === current ? previous : current,
+        );
+      });
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", updateActiveSection, { passive: true });
+    window.addEventListener("resize", updateActiveSection);
+    return () => {
+      window.removeEventListener("scroll", updateActiveSection);
+      window.removeEventListener("resize", updateActiveSection);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
     <>
       <div className="topbar china-topbar">
@@ -125,16 +159,22 @@ function Header({
             className={open ? "nav-open" : ""}
             aria-label="Main navigation"
           >
-            {nav.map((item, index) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={index === 0 ? "active" : ""}
-              >
-                {item.label}
-              </a>
-            ))}
+            {nav.map((item) => {
+              const sectionId = item.href.slice(1);
+              return (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={activeSection === sectionId ? "active" : ""}
+                  aria-current={
+                    activeSection === sectionId ? "location" : undefined
+                  }
+                >
+                  {item.label}
+                </a>
+              );
+            })}
           </nav>
           <a
             className="nav-admin"
@@ -418,298 +458,12 @@ function TrackingSection() {
 
 type GeoPoint = readonly [longitude: number, latitude: number];
 
-const worldLand: readonly (readonly GeoPoint[])[] = [
-  [
-    [-168, 70],
-    [-160, 71],
-    [-151, 68],
-    [-144, 69],
-    [-137, 65],
-    [-132, 58],
-    [-128, 54],
-    [-125, 49],
-    [-123, 44],
-    [-118, 34],
-    [-112, 31],
-    [-106, 29],
-    [-100, 28],
-    [-97, 25],
-    [-92, 19],
-    [-88, 17],
-    [-84, 19],
-    [-81, 24],
-    [-80, 29],
-    [-77, 34],
-    [-74, 40],
-    [-69, 44],
-    [-64, 46],
-    [-59, 51],
-    [-63, 56],
-    [-69, 59],
-    [-73, 63],
-    [-79, 67],
-    [-85, 70],
-    [-92, 73],
-    [-101, 72],
-    [-110, 74],
-    [-119, 73],
-    [-130, 72],
-    [-140, 70],
-    [-151, 72],
-    [-160, 70],
-    [-168, 70],
-  ],
-  [
-    [-168, 65],
-    [-164, 61],
-    [-158, 58],
-    [-153, 59],
-    [-150, 62],
-    [-154, 66],
-    [-161, 68],
-    [-168, 65],
-  ],
-  [
-    [-53, 83],
-    [-45, 81],
-    [-39, 76],
-    [-36, 71],
-    [-41, 66],
-    [-46, 61],
-    [-52, 59],
-    [-59, 63],
-    [-62, 69],
-    [-59, 76],
-    [-53, 83],
-  ],
-  [
-    [-10, 36],
-    [-9, 43],
-    [-5, 48],
-    [0, 50],
-    [3, 54],
-    [9, 55],
-    [14, 58],
-    [20, 60],
-    [25, 65],
-    [28, 70],
-    [31, 72],
-    [29, 75],
-    [34, 77],
-    [40, 73],
-    [45, 69],
-    [51, 69],
-    [60, 68],
-    [70, 70],
-    [80, 73],
-    [95, 75],
-    [110, 74],
-    [125, 72],
-    [139, 70],
-    [151, 68],
-    [163, 65],
-    [170, 61],
-    [164, 57],
-    [157, 55],
-    [151, 51],
-    [145, 49],
-    [141, 45],
-    [137, 43],
-    [132, 42],
-    [128, 38],
-    [126, 34],
-    [122, 31],
-    [120, 26],
-    [116, 23],
-    [112, 21],
-    [110, 18],
-    [107, 16],
-    [104, 13],
-    [101, 10],
-    [98, 7],
-    [95, 8],
-    [92, 12],
-    [90, 21],
-    [86, 22],
-    [83, 20],
-    [80, 9],
-    [77, 8],
-    [74, 13],
-    [72, 20],
-    [68, 23],
-    [63, 25],
-    [58, 25],
-    [53, 27],
-    [49, 30],
-    [46, 33],
-    [43, 37],
-    [39, 40],
-    [34, 41],
-    [30, 42],
-    [27, 45],
-    [24, 43],
-    [22, 40],
-    [19, 41],
-    [17, 45],
-    [16, 49],
-    [14, 53],
-    [11, 56],
-    [8, 58],
-    [7, 55],
-    [4, 53],
-    [2, 51],
-    [-3, 51],
-    [-5, 48],
-    [-7, 45],
-    [-10, 43],
-    [-10, 36],
-  ],
-  [
-    [-17, 14],
-    [-16, 21],
-    [-13, 27],
-    [-9, 32],
-    [-5, 36],
-    [1, 36],
-    [8, 37],
-    [13, 33],
-    [20, 32],
-    [25, 31],
-    [32, 31],
-    [35, 28],
-    [41, 15],
-    [50, 11],
-    [49, 3],
-    [45, -5],
-    [42, -12],
-    [40, -18],
-    [35, -24],
-    [33, -30],
-    [27, -34],
-    [20, -34],
-    [17, -29],
-    [14, -23],
-    [12, -16],
-    [10, -5],
-    [6, 5],
-    [1, 5],
-    [-5, 5],
-    [-10, 8],
-    [-15, 11],
-    [-17, 14],
-  ],
-  [
-    [-81, 12],
-    [-77, 8],
-    [-75, 4],
-    [-77, 0],
-    [-79, -5],
-    [-76, -10],
-    [-73, -16],
-    [-70, -22],
-    [-68, -28],
-    [-64, -34],
-    [-60, -39],
-    [-55, -45],
-    [-51, -51],
-    [-47, -54],
-    [-43, -50],
-    [-40, -43],
-    [-38, -35],
-    [-35, -27],
-    [-35, -19],
-    [-39, -12],
-    [-42, -6],
-    [-47, -2],
-    [-50, 1],
-    [-56, 4],
-    [-62, 7],
-    [-68, 10],
-    [-74, 11],
-    [-81, 12],
-  ],
-  [
-    [113, -11],
-    [115, -20],
-    [121, -18],
-    [127, -16],
-    [133, -12],
-    [137, -14],
-    [141, -17],
-    [147, -19],
-    [153, -25],
-    [151, -33],
-    [146, -38],
-    [139, -37],
-    [134, -34],
-    [128, -34],
-    [123, -32],
-    [118, -29],
-    [115, -22],
-    [113, -11],
-  ],
-  [
-    [44, -12],
-    [49, -13],
-    [50, -18],
-    [48, -24],
-    [45, -25],
-    [43, -20],
-    [44, -12],
-  ],
-  [
-    [130, 33],
-    [132, 34],
-    [135, 35],
-    [137, 37],
-    [140, 41],
-    [142, 44],
-    [145, 43],
-    [143, 39],
-    [141, 36],
-    [138, 35],
-    [135, 34],
-    [133, 32],
-    [130, 33],
-  ],
-  [
-    [95, 5],
-    [101, 3],
-    [107, 1],
-    [112, -1],
-    [117, -2],
-    [122, -4],
-    [128, -4],
-    [133, -3],
-    [130, -7],
-    [124, -8],
-    [118, -7],
-    [112, -6],
-    [107, -5],
-    [102, -4],
-    [98, -2],
-    [95, 5],
-  ],
-];
-
 function projectMapPoint([longitude, latitude]: GeoPoint) {
   return {
     x: ((longitude + 180) * 640) / 360,
     y: 8 + ((90 - latitude) * 334) / 180,
   };
 }
-
-const worldLandPath = worldLand
-  .map(
-    (polygon) =>
-      polygon
-        .map(([longitude, latitude], index) => {
-          const { x, y } = projectMapPoint([longitude, latitude]);
-          return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
-        })
-        .join(" ") + " Z",
-  )
-  .join(" ");
 
 const routeOrigin = projectMapPoint([105, 35]);
 const destinationRoutes = [
@@ -770,9 +524,14 @@ function Destinations() {
           role="img"
           aria-label="Map showing illustrative air freight routes from China to Europe, the Gulf region, Southeast Asia, Australia, and North America."
         >
-          <div className="china-route-grid" />
+          <img
+            className="china-route-map"
+            src="/world-map.svg"
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+          />
           <svg viewBox="0 0 640 350" aria-hidden="true" focusable="false">
-            <path className="china-map-land" d={worldLandPath} />
             {destinationRoutes.map((route, index) => (
               <path
                 key={route.name}
@@ -818,9 +577,11 @@ function Destinations() {
             </g>
           </svg>
           <div className="china-route-caption">
-            <Globe2 size={20} />
             <span>
-              <b>International freight</b>
+              <span className="china-route-caption-title">
+                <Plane size={16} aria-hidden="true" />
+                <b>International freight</b>
+              </span>
               <small>
                 Illustrative routes · Confirm destination availability
               </small>

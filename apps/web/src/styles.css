@@ -1459,6 +1459,13 @@ input {
   .site-header nav a.active:after {
     display: none;
   }
+  .site-header nav a.active {
+    background: #fff1f2;
+    border-radius: 6px;
+    color: var(--red);
+    font-weight: 800;
+    padding-inline: 10px;
+  }
   .hero {
     min-height: 760px;
   }
@@ -2229,7 +2236,7 @@ input {
   margin-top: 14px;
 }
 .china-route-visual {
-  height: 350px;
+  aspect-ratio: 640 / 350;
   position: relative;
   overflow: hidden;
   border: 1px solid #ffffff1c;
@@ -2241,28 +2248,18 @@ input {
     #101d32 100%
   );
 }
-.china-route-grid {
+.china-route-map {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(#ffffff0b 1px, transparent 1px),
-    linear-gradient(90deg, #ffffff0b 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse, #000 20%, transparent 85%);
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
 }
 .china-route-visual svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-}
-.china-map-land {
-  fill: #a7b8cb;
-  fill-rule: evenodd;
-  opacity: 0.3;
-  stroke: #d7e1ed;
-  stroke-opacity: 0.28;
-  stroke-width: 0.65;
 }
 .china-route-line {
   fill: none;
@@ -2368,7 +2365,15 @@ input {
   border-radius: 10px;
   backdrop-filter: blur(8px);
 }
-.china-route-caption > svg {
+.china-route-caption-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.china-route-caption-title > svg {
+  flex: 0 0 16px;
+  height: 16px;
+  width: 16px;
   color: #ffd43b;
 }
 .china-route-caption b,
@@ -2741,7 +2746,7 @@ main > section:not(.china-hero) p,
     font-size: 12px;
   }
   .china-route-visual {
-    height: 280px;
+    aspect-ratio: 640 / 350;
   }
   .china-about-layout {
     grid-template-columns: 1fr;
