@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import Lenis from "lenis";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
@@ -25,11 +25,12 @@ import Brand from "./components/Brand";
 import TrackingForm from "./components/TrackingForm";
 import { services } from "./data/services";
 import LoginDialog from "./components/CustomerAccess";
-import CustomerDashboard from "./components/CustomerDashboard";
 import ServiceInquiry from "./components/ServiceInquiry";
 import ShipmentQuote from "./components/ShipmentQuote";
-import AdminDashboard from "./AdminDashboard";
 import { useAuth } from "./auth/AuthContext";
+
+const CustomerDashboard = lazy(() => import("./components/CustomerDashboard"));
+const AdminDashboard = lazy(() => import("./AdminDashboard"));
 
 const supportPhone = import.meta.env.VITE_SUPPORT_PHONE as string | undefined;
 const supportWhatsApp = import.meta.env.VITE_SUPPORT_WHATSAPP as
@@ -49,6 +50,17 @@ const nav = [
   { label: "Destinations", href: "#destinations" },
   { label: "About", href: "#about" },
 ];
+
+function RouteLoading() {
+  return (
+    <main className="customer-dashboard-gate" role="status" aria-live="polite">
+      <div className="customer-dashboard-gate-content">
+        <span className="customer-dashboard-spinner" aria-hidden="true" />
+        <p>Loading secure workspace...</p>
+      </div>
+    </main>
+  );
+}
 
 const benefits = [
   {
@@ -1005,7 +1017,13 @@ export default function App() {
     return () => lenis.destroy();
   }, []);
 
-  if (location.pathname.startsWith("/admin")) return <AdminDashboard />;
+  if (location.pathname.startsWith("/admin")) {
+    return (
+      <Suspense fallback={<RouteLoading />}>
+        <AdminDashboard />
+      </Suspense>
+    );
+  }
 
   if (location.pathname === "/dashboard") {
     if (loading) {
@@ -1041,7 +1059,7 @@ export default function App() {
       return <Navigate to="/admin" replace />;
 
     return (
-      <>
+      <Suspense fallback={<RouteLoading />}>
         <CustomerDashboard onOpenQuote={openQuote} />
         {quoteOpen && (
           <ShipmentQuote
@@ -1049,7 +1067,7 @@ export default function App() {
             onLogin={() => openLogin("/dashboard?intent=quote")}
           />
         )}
-      </>
+      </Suspense>
     );
   }
 
