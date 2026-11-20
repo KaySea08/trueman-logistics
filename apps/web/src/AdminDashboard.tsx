@@ -24,6 +24,7 @@ import AdminQuoteRequests from "./components/AdminQuoteRequests";
 import AdminStaffDirectory from "./components/AdminStaffDirectory";
 import AdminDepartments from "./components/AdminDepartments";
 import AdminAccountSecurity from "./components/AdminAccountSecurity";
+import { AdminAssignments, AdminAuditHistory, AdminConfiguration, AdminRoleManager, AdminSessions } from "./components/AdminGovernance";
 import "./admin.css";
 
 const API =
@@ -203,11 +204,12 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState<Detail | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [assignmentId, setAssignmentId] = useState("");
+  const [assignmentReason, setAssignmentReason] = useState("");
   const [eventStatus, setEventStatus] = useState("ORDER_CONFIRMED");
   const [eventLocation, setEventLocation] = useState("");
   const [eventNote, setEventNote] = useState("");
   const [tab, setTab] = useState<
-    "shipments" | "quotes" | "activity" | "staff" | "departments" | "account"
+    "shipments" | "quotes" | "activity" | "staff" | "departments" | "assignments" | "roles" | "sessions" | "audit" | "configuration" | "account"
   >("shipments");
   const [refreshing, setRefreshing] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -225,6 +227,9 @@ export default function AdminDashboard() {
     !mustChangePassword && permissions.includes("staff:manage");
   const canManageDepartments =
     !mustChangePassword && permissions.includes("system:manage");
+  const canManageRoles = !mustChangePassword && permissions.includes("roles:manage");
+  const canManageSessions = !mustChangePassword && permissions.includes("sessions:manage");
+  const canReadAudit = !mustChangePassword && permissions.includes("audit:read");
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: "1", pageSize: "50" });
@@ -510,10 +515,11 @@ export default function AdminDashboard() {
         `/admin/operations/shipments/${encodeURIComponent(selected.id)}/assign`,
         {
           method: "POST",
-          body: JSON.stringify({ staffId: assignmentId }),
+          body: JSON.stringify({ staffId: assignmentId, reason: assignmentReason.trim() || undefined }),
         },
       );
       await openShipment(selected.id);
+      setAssignmentReason("");
       await loadDashboard();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Assignment failed.");
@@ -825,6 +831,11 @@ export default function AdminDashboard() {
             <Building2 size={17} /> Departments
           </button>
         )}
+        {canManageRoles && <button className={tab === "roles" ? "active" : ""} onClick={() => setTab("roles")}><ShieldCheck size={17} /> Roles &amp; permissions</button>}
+        {canAccessOperations && <button className={tab === "assignments" ? "active" : ""} onClick={() => setTab("assignments")}><Truck size={17} /> Assignments &amp; workload</button>}
+        {canManageSessions && <button className={tab === "sessions" ? "active" : ""} onClick={() => setTab("sessions")}><LockKeyhole size={17} /> Sessions &amp; devices</button>}
+        {canReadAudit && <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}><Activity size={17} /> Audit history</button>}
+        {canManageDepartments && <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}><LockKeyhole size={17} /> System configuration</button>}
         <button
           className={tab === "account" ? "active" : ""}
           onClick={() => setTab("account")}
@@ -858,6 +869,16 @@ export default function AdminDashboard() {
                       ? "Departments"
                       : tab === "account"
                         ? "Account security"
+                        : tab === "roles"
+                          ? "Roles & permissions"
+                          : tab === "assignments"
+                            ? "Assignments & workload"
+                          : tab === "sessions"
+                            ? "Sessions & devices"
+                            : tab === "audit"
+                                ? "Audit history"
+                                : tab === "configuration"
+                                  ? "System configuration"
                         : "Staff activity"}
             </h1>
           </div>
@@ -1085,6 +1106,16 @@ export default function AdminDashboard() {
           />
         ) : tab === "departments" ? (
           <AdminDepartments />
+        ) : tab === "roles" ? (
+          <AdminRoleManager />
+        ) : tab === "assignments" ? (
+          <AdminAssignments />
+        ) : tab === "sessions" ? (
+          <AdminSessions />
+        ) : tab === "audit" ? (
+          <AdminAuditHistory />
+        ) : tab === "configuration" ? (
+          <AdminConfiguration />
         ) : tab === "account" ? (
           <AdminAccountSecurity
             required={mustChangePassword}
@@ -1286,6 +1317,13 @@ export default function AdminDashboard() {
                       </option>
                     ))}
                   </select>
+                  <input
+                    aria-label="Reason for reassignment"
+                    placeholder="Reason (required for reassignment)"
+                    maxLength={500}
+                    value={assignmentReason}
+                    onChange={(e) => setAssignmentReason(e.target.value)}
+                  />
                   <button
                     className="admin-secondary"
                     disabled={

@@ -1,13 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
-import { ConflictException } from "@nestjs/common";
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { authenticator } from "otplib";
 import * as argon2 from "argon2";
 
 import { AuthService } from "./auth.service";
 import { SessionGuard } from "./session.guard";
+
+test("administrative MFA reset requires an MFA-enabled super administrator", async () => {
+  let targetRead = false;
+  const tx = {
+    user: { findUnique: async () => ({ id: "actor", status: "ACTIVE", mfaEnabled: false, mfaConfiguration: null, userRoles: [] }) },
+    staffProfile: { findUnique: async () => { targetRead = true; return null; } },
+  };
+  const prisma = { $transaction: (operation: (client: typeof tx) => unknown) => operation(tx) };
+  const service = new AuthService(prisma as never, {} as never, {} as never, {} as never, {} as never);
+  await assert.rejects(() => service.adminResetStaffMfa("actor", "target", "123456"), ForbiddenException);
+  assert.equal(targetRead, false);
+});
 
 test("register converts Prisma duplicate email constraint errors into a ConflictException", async () => {
   const prisma = {
@@ -70,6 +82,7 @@ test("a valid MFA login challenge cannot create two concurrent sessions", async 
   let sessions = 0;
   const sessionTransaction = {
     $queryRaw: async () => [{ status: "ACTIVE", passwordHash: "test-hash" }],
+    user: { update: async () => undefined },
     session: {
       create: async () => {
         sessions += 1;

@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { SessionGuard } from '../auth/session.guard';
 import { OperationsService } from './operations.service';
 import {
+  AssignmentListQueryDto,
   AssignShipmentDto,
   ReviewShipmentDto,
   ShipmentEventDto,
@@ -83,5 +84,19 @@ export class OperationsController {
   activity(@Req() req: Request) {
     this.requirePermission(req, 'shipments:manage');
     return this.operations.activity();
+  }
+
+  @Get('assignments')
+  @Header('Cache-Control', 'no-store, private')
+  assignments(@Req() req: Request, @Query() query: AssignmentListQueryDto) {
+    this.requirePermission(req, 'shipments:manage');
+    return this.operations.listAssignments(query);
+  }
+
+  @Get('assignments/workload')
+  @Header('Cache-Control', 'no-store, private')
+  assignmentWorkload(@Req() req: Request) {
+    this.requirePermission(req, 'shipments:manage');
+    return this.operations.assignmentWorkload();
   }
 }

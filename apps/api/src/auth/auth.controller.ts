@@ -57,6 +57,7 @@ export class AuthController {
       dto.email,
       dto.password,
       req.ip ?? "unknown",
+      req.get("user-agent") ?? "",
     );
     if ("sessionToken" in result) {
       res.cookie("trueman_session", result.sessionToken, cookieOptions());
@@ -70,8 +71,9 @@ export class AuthController {
   @Post("mfa/login") async mfaLogin(
     @Body() body: MfaLoginDto,
     @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
   ) {
-    const result = await this.auth.completeMfaLogin(body.challenge, body.code);
+    const result = await this.auth.completeMfaLogin(body.challenge, body.code, req.ip ?? "unknown", req.get("user-agent") ?? "");
     res.cookie("trueman_session", result.sessionToken, cookieOptions());
     return {
       user: result.user,

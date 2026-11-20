@@ -43,7 +43,7 @@ export default function AdminAccountSecurity({
   }
 
   return (
-    <section className="admin-panel">
+    <section className="admin-panel admin-account-security">
       <div className="admin-panel-heading">
         <h2>Change password</h2>
       </div>
@@ -57,7 +57,7 @@ export default function AdminAccountSecurity({
           {error}
         </div>
       )}
-      <form className="admin-form" onSubmit={submit}>
+      <form className="admin-form admin-account-security-form" onSubmit={submit}>
         <label>
           Current password
           <input

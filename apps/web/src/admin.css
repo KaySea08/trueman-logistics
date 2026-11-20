@@ -135,6 +135,121 @@
   opacity: 1;
   font-weight: 400;
 }
+.admin-governance-form,
+.admin-staff-profile {
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid var(--admin-line);
+  border-radius: 12px;
+  background: var(--admin-surface-subtle);
+}
+.admin-governance-form h3,
+.admin-profile-assignments h4 {
+  margin: 0 0 14px;
+  color: var(--admin-ink);
+  font-size: 16px;
+}
+.admin-governance-form > label,
+.admin-staff-profile-form > label {
+  width: min(100%, 360px);
+}
+.admin-governance-form fieldset {
+  min-width: 0;
+  margin: 8px 0;
+  border: 1px solid var(--admin-line);
+  border-radius: 9px;
+  padding: 14px;
+}
+.admin-governance-form legend {
+  padding: 0 5px;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-permission-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+.admin-permission-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid var(--admin-line);
+  border-radius: 8px;
+  padding: 9px;
+  background: #fff;
+  color: var(--admin-ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.admin-permission-list input {
+  margin: 2px 0 0;
+  accent-color: var(--admin-action);
+}
+.admin-permission-list span,
+.admin-permission-list small {
+  display: block;
+}
+.admin-permission-list small {
+  margin-top: 3px;
+  color: var(--admin-muted);
+  line-height: 1.4;
+}
+.admin-staff-profile-link {
+  padding: 0;
+  border: 0;
+  color: var(--admin-action);
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.admin-staff-profile-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.admin-staff-profile-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+.admin-staff-profile-form > label { width: 100%; }
+.admin-profile-assignments { margin-top: 20px; }
+.admin-profile-assignments > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(150px, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--admin-line);
+  font-size: 13px;
+}
+.admin-profile-assignments small { color: var(--admin-muted); }
+.admin-profile-assignments p { color: var(--admin-muted); font-size: 13px; }
+.admin-configuration-form,
+.admin-control-state {
+  max-width: 720px;
+  margin: 16px 0;
+  padding: 20px;
+  border: 1px solid var(--admin-line);
+  border-radius: 12px;
+  background: var(--admin-surface-subtle);
+}
+.admin-configuration-form h3,
+.admin-control-state h3 { margin: 0 0 8px; font-size: 16px; }
+.admin-configuration-form p,
+.admin-control-state small { color: var(--admin-muted); font-size: 13px; line-height: 1.5; }
+.admin-configuration-form > label { max-width: 320px; }
+.admin-control-state p { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-bottom: 1px solid var(--admin-line); padding: 8px 0; font-size: 13px; }
+.admin-workload-list { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 14px; }
+.admin-workload-list article { display: grid; grid-template-columns: 24px 1fr auto; gap: 4px 8px; min-width: 210px; padding: 12px; border: 1px solid var(--admin-line); border-radius: 10px; background: var(--admin-surface-subtle); font-size: 12px; }
+.admin-workload-list article > span { grid-row: span 2; color: var(--admin-action); }
+.admin-workload-list article small { grid-column: 2; color: var(--admin-muted); }
+.admin-workload-list article strong { grid-column: 3; grid-row: 1 / span 2; align-self: center; font-size: 18px; }
+.admin-governance td code { font-size: 11px; }
+.admin-mfa-reset { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--admin-line); }
+.admin-mfa-reset h4 { margin: 0 0 7px; font-size: 14px; }
+.admin-mfa-reset p { max-width: 65ch; color: var(--admin-muted); font-size: 13px; line-height: 1.5; }
 .admin-staff-create-form select:invalid {
   color: var(--admin-muted);
   font-weight: 400;

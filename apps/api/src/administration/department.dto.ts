@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from "class-validator";
 
 export class DepartmentListDto {
   @IsOptional()
@@ -25,4 +25,11 @@ export class CreateDepartmentDto {
   @IsString()
   @Length(1, 1000)
   description?: string;
+}
+
+export class UpdateDepartmentDto {
+  @IsOptional() @IsString() @Length(2, 100) name?: string;
+  @IsOptional() @IsString() @MaxLength(1000) description?: string | null;
+  @IsOptional() @IsString() @MaxLength(100) headId?: string | null;
+  @IsOptional() @IsBoolean() active?: boolean;
 }

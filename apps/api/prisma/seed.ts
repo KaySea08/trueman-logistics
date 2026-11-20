@@ -16,6 +16,8 @@ const permissions = [
   ["roles:manage", "Manage roles and permissions"],
   ["system:manage", "Manage system configuration"],
   ["audit:read", "Read security and audit events"],
+  ["sessions:manage", "View and revoke staff sessions"],
+  ["mfa:manage", "Reset staff multi-factor authentication after step-up verification"],
 ];
 const rolePermissions: Record<string, string[]> = {
   CUSTOMER: ["customer:profile:read", "customer:profile:update"],
@@ -61,8 +63,9 @@ async function main() {
       create: {
         name,
         description: `${name.replaceAll("_", " ").toLowerCase()} access role`,
+        isSystem: true,
       },
-      update: {},
+      update: { isSystem: true },
     });
     for (const key of keys) {
       const permission = await prisma.permission.findUniqueOrThrow({

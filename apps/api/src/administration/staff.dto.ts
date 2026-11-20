@@ -9,6 +9,7 @@ import {
   IsString,
   Max,
   MaxLength,
+  Length,
   MinLength,
   Min,
 } from "class-validator";
@@ -46,6 +47,18 @@ export class StaffListDto {
   @IsString()
   @MaxLength(100)
   department?: string;
+
+  @IsOptional()
+  @IsIn(["true", "false"])
+  active?: "true" | "false";
+
+  @IsOptional()
+  @IsIn(["name", "createdAt", "department", "lastLoginAt"])
+  sortBy?: "name" | "createdAt" | "department" | "lastLoginAt";
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sortDirection?: "asc" | "desc";
 }
 
 export const STAFF_CREATE_ROLES = [
@@ -76,6 +89,11 @@ export class CreateStaffDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
   @MinLength(2)
   @MaxLength(50)
   employeeCode?: string;
@@ -84,8 +102,53 @@ export class CreateStaffDto {
   @IsBoolean()
   generateEmployeeCode?: boolean;
 
-  @IsIn(STAFF_CREATE_ROLES)
-  role!: (typeof STAFF_CREATE_ROLES)[number];
+  @IsString()
+  @Length(2, 80)
+  role!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  departmentId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supervisorId?: string;
+}
+
+export class UpdateStaffDto {
+  @IsOptional()
+  @IsString()
+  @Length(2, 100)
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  jobTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  departmentId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  supervisorId?: string | null;
+
+}
+
+export class AssignStaffRoleDto {
+  @IsString()
+  @MaxLength(100)
+  roleId!: string;
 }
 
 export class ChangeStaffStatusDto {

@@ -8,16 +8,22 @@ type StaffEntry = {
   fullName: string;
   active: boolean;
   jobTitle: string | null;
-  department: { name: string; active: boolean } | null;
-  supervisor: { fullName: string } | null;
+  department: { id: string; name: string; active: boolean } | null;
+  supervisor: { id: string; fullName: string } | null;
   user: {
     email: string | null;
     phone: string | null;
     status: string;
     createdAt: string;
+    lastLoginAt: string | null;
     mfaEnabled: boolean;
-    userRoles: Array<{ role: { name: string } }>;
+    userRoles: Array<{ role: { id?: string; name: string } }>;
   };
+};
+
+type StaffProfile = StaffEntry & {
+  reports?: { id: string; fullName: string; employeeCode: string }[];
+  assignments?: { id: string; assignedAt: string; reason: string | null; shipment: { id: string; shipmentNumber: string; status: string } }[];
 };
 
 type StaffPage = {
@@ -33,17 +39,6 @@ function display(value: string) {
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
-
-const staffRoles = [
-  "ADMINISTRATOR",
-  "OPERATIONS_MANAGER",
-  "QUOTE_OFFICER",
-  "SHIPMENT_OFFICER",
-  "WAREHOUSE_PERSONNEL",
-  "DELIVERY_PERSONNEL",
-  "FINANCE_OFFICER",
-  "CUSTOMER_SUPPORT",
-];
 
 export default function AdminStaffDirectory({
   canCreate,
@@ -69,6 +64,15 @@ export default function AdminStaffDirectory({
   const [creating, setCreating] = useState(false);
   const [busyStaffId, setBusyStaffId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [activeFilter, setActiveFilter] = useState("");
+  const [sortBy, setSortBy] = useState("name");
+  const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [profileDraft, setProfileDraft] = useState({ fullName: "", jobTitle: "", phone: "", departmentId: "", supervisorId: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [departments, setDepartments] = useState<{ id: string; name: string; active: boolean }[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<{ id: string; name: string }[]>([]);
+  const [roleToAssign, setRoleToAssign] = useState("");
+  const [mfaVerificationCode, setMfaVerificationCode] = useState("");
 
   async function changeStatus(
     person: StaffEntry,
@@ -111,19 +115,12 @@ export default function AdminStaffDirectory({
   }
 
   async function resendInvitation(person: StaffEntry) {
-    if (!person.user.email) return;
     setBusyStaffId(person.id);
     setError("");
     setNotice("");
     try {
-      const result = await apiRequest<{ message: string }>(
-        "/auth/resend-verification",
-        {
-          method: "POST",
-          body: JSON.stringify({ email: person.user.email }),
-        },
-      );
-      setNotice(result.message);
+      const result = await apiRequest<{ invitationSent: boolean }>(`/admin/staff/${encodeURIComponent(person.id)}/invitation`, { method: "POST" });
+      setNotice(result.invitationSent ? "Staff invitation resent." : "The invitation could not be sent. Try again later.");
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -194,6 +191,8 @@ export default function AdminStaffDirectory({
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (status) params.set("status", status);
     if (department.trim()) params.set("department", department.trim());
+    if (activeFilter) params.set("active", activeFilter);
+    params.set("sortBy", sortBy);
     setLoading(true);
     setError("");
     apiRequest<StaffPage>(`/admin/staff?${params}`)
@@ -216,7 +215,71 @@ export default function AdminStaffDirectory({
     return () => {
       active = false;
     };
-  }, [debouncedSearch, department, page, refresh, status]);
+  }, [activeFilter, debouncedSearch, department, page, refresh, sortBy, status]);
+
+  useEffect(() => {
+    apiRequest<{ items: { id: string; name: string; active: boolean }[] }>("/admin/departments?page=1&pageSize=100")
+      .then((result) => setDepartments(result.items.filter((item) => item.active)))
+      .catch(() => setDepartments([]));
+  }, []);
+
+  useEffect(() => {
+    if (!canCreate) return;
+    apiRequest<{ id: string; name: string; isSystem: boolean }[]>("/admin/roles")
+      .then((items) => setAvailableRoles(items.filter((item) => item.name !== "SUPER_ADMINISTRATOR" && item.name !== "CUSTOMER")))
+      .catch(() => setAvailableRoles([]));
+  }, [canCreate]);
+
+  useEffect(() => {
+    if (profile) setProfileDraft({ fullName: profile.fullName, jobTitle: profile.jobTitle ?? "", phone: profile.user.phone ?? "", departmentId: profile.department?.id ?? "", supervisorId: profile.supervisor?.id ?? "" });
+  }, [profile]);
+
+  async function openProfile(person: StaffEntry) {
+    setError("");
+    try { setProfile(await apiRequest<StaffProfile>(`/admin/staff/${encodeURIComponent(person.id)}`)); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Could not load staff profile."); }
+  }
+
+  async function saveProfile(event: FormEvent) {
+    event.preventDefault(); if (!profile) return;
+    setSavingProfile(true); setError(""); setNotice("");
+    try {
+      await apiRequest(`/admin/staff/${encodeURIComponent(profile.id)}`, { method: "PATCH", body: JSON.stringify({ fullName: profileDraft.fullName.trim(), jobTitle: profileDraft.jobTitle.trim() || null, phone: profileDraft.phone.trim() || null, departmentId: profileDraft.departmentId || null, supervisorId: profileDraft.supervisorId || null }) });
+      setProfile(null); setNotice("Staff profile updated."); setRefresh((v) => v + 1);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not update staff profile."); }
+    finally { setSavingProfile(false); }
+  }
+
+  async function assignRole() {
+    if (!profile || !roleToAssign) return;
+    setSavingProfile(true); setError("");
+    try {
+      await apiRequest(`/admin/staff/${encodeURIComponent(profile.id)}/roles`, { method: "POST", body: JSON.stringify({ roleId: roleToAssign }) });
+      setRoleToAssign(""); await openProfile(profile); setRefresh((v) => v + 1); setNotice("Role assigned. The staff member must sign in again.");
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not assign role."); }
+    finally { setSavingProfile(false); }
+  }
+
+  async function removeRole(roleId: string) {
+    if (!profile || !window.confirm("Remove this role? The staff member’s active sessions will be revoked.")) return;
+    setSavingProfile(true); setError("");
+    try {
+      await apiRequest(`/admin/staff/${encodeURIComponent(profile.id)}/roles/${encodeURIComponent(roleId)}`, { method: "DELETE" });
+      await openProfile(profile); setRefresh((v) => v + 1); setNotice("Role removed. The staff member must sign in again.");
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not remove role."); }
+    finally { setSavingProfile(false); }
+  }
+
+  async function resetMfa() {
+    if (!profile || !mfaVerificationCode.trim()) return;
+    if (!window.confirm(`Reset MFA for ${profile.fullName}? Their active sessions will be revoked and they must enroll again.`)) return;
+    setSavingProfile(true); setError(""); setNotice("");
+    try {
+      await apiRequest(`/admin/staff/${encodeURIComponent(profile.id)}/mfa-reset`, { method: "POST", body: JSON.stringify({ code: mfaVerificationCode.trim() }) });
+      setMfaVerificationCode(""); await openProfile(profile); setRefresh((v) => v + 1); setNotice("MFA reset. The staff member must enroll again at next sign-in.");
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not reset staff MFA."); }
+    finally { setSavingProfile(false); }
+  }
 
   return (
     <section className="admin-panel">
@@ -327,9 +390,9 @@ export default function AdminStaffDirectory({
               <option value="" disabled>
                 Choose a staff role
               </option>
-              {staffRoles.map((item) => (
-                <option key={item} value={item}>
-                  {display(item)}
+              {availableRoles.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {display(item.name)}
                 </option>
               ))}
             </select>
@@ -365,6 +428,12 @@ export default function AdminStaffDirectory({
           <option value="INVITED">Invited</option>
           <option value="SUSPENDED">Suspended</option>
           <option value="DISABLED">Disabled</option>
+        </select>
+        <select aria-label="Employment status" value={activeFilter} onChange={(event) => { setActiveFilter(event.target.value); setPage(1); }}>
+          <option value="">All employment statuses</option><option value="true">Active profile</option><option value="false">Inactive profile</option>
+        </select>
+        <select aria-label="Sort staff" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+          <option value="name">Sort by name</option><option value="createdAt">Sort by registration</option><option value="department">Sort by department</option><option value="lastLoginAt">Sort by last activity</option>
         </select>
         <label className="admin-search">
           <input
@@ -409,7 +478,7 @@ export default function AdminStaffDirectory({
               data.items.map((person) => (
                 <tr key={person.id}>
                   <td>
-                    <b>{person.fullName}</b>
+                    <button type="button" className="admin-staff-profile-link" onClick={() => void openProfile(person)}>{person.fullName}</button>
                     <small>
                       {person.employeeCode}
                       {person.jobTitle ? ` · ${person.jobTitle}` : ""}
@@ -519,6 +588,22 @@ export default function AdminStaffDirectory({
           </tbody>
         </table>
       </div>
+      {profile && (
+        <section className="admin-staff-profile" aria-labelledby="staff-profile-title">
+          <div className="admin-panel-heading"><div><h3 id="staff-profile-title">{profile.fullName}</h3><p>{profile.employeeCode} · {profile.user.email ?? "No email"} · Last login {profile.user.lastLoginAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(profile.user.lastLoginAt)) : "Not recorded"}</p></div><button type="button" className="admin-secondary" onClick={() => setProfile(null)}>Close profile</button></div>
+          {canCreate ? <form className="admin-form admin-staff-profile-form" onSubmit={saveProfile}>
+            <label>Full name<input required minLength={2} maxLength={100} value={profileDraft.fullName} onChange={(e) => setProfileDraft({ ...profileDraft, fullName: e.target.value })}/></label>
+            <label>Job title<input maxLength={100} value={profileDraft.jobTitle} onChange={(e) => setProfileDraft({ ...profileDraft, jobTitle: e.target.value })}/></label>
+            <label>Phone<input maxLength={32} value={profileDraft.phone} onChange={(e) => setProfileDraft({ ...profileDraft, phone: e.target.value })}/></label>
+            <label>Department<select value={profileDraft.departmentId} onChange={(e) => setProfileDraft({ ...profileDraft, departmentId: e.target.value })}><option value="">Unassigned</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Supervisor<select value={profileDraft.supervisorId} onChange={(e) => setProfileDraft({ ...profileDraft, supervisorId: e.target.value })}><option value="">Unassigned</option>{(data?.items ?? []).filter((item) => item.id !== profile.id && item.active).map((item) => <option key={item.id} value={item.id}>{item.fullName} · {item.employeeCode}</option>)}</select></label>
+            <button className="admin-primary" disabled={savingProfile}>{savingProfile ? "Saving…" : "Save profile"}</button>
+          </form> : <p>{profile.jobTitle ?? "No job title"} · {profile.department?.name ?? "No department"} · Supervisor: {profile.supervisor?.fullName ?? "Unassigned"}</p>}
+          <div className="admin-profile-assignments"><h4>Assigned roles</h4>{profile.user.userRoles.map(({ role: assigned }) => <div key={assigned.id ?? assigned.name}><b>{display(assigned.name)}</b>{canCreate && assigned.name !== "SUPER_ADMINISTRATOR" && <button type="button" className="admin-danger" disabled={savingProfile || profile.user.userRoles.length <= 1 || !assigned.id} onClick={() => assigned.id && void removeRole(assigned.id)}>Remove</button>}</div>)}{canCreate && <div className="admin-action-row"><select aria-label="Role to assign" value={roleToAssign} onChange={(e) => setRoleToAssign(e.target.value)}><option value="">Choose a role to add</option>{availableRoles.filter((item) => !profile.user.userRoles.some(({ role: assigned }) => assigned.id === item.id)).map((item) => <option key={item.id} value={item.id}>{display(item.name)}</option>)}</select><button type="button" className="admin-secondary" disabled={savingProfile || !roleToAssign} onClick={() => void assignRole()}>Assign role</button></div>}</div>
+          {canCreate && <div className="admin-mfa-reset"><h4>Reset staff MFA</h4><p>The staff member will be signed out and must enroll again. Confirm with your current authenticator or recovery code.</p><div className="admin-action-row"><input aria-label="Administrator MFA confirmation code" autoComplete="one-time-code" maxLength={10} placeholder="Your authenticator or recovery code" value={mfaVerificationCode} onChange={(e) => setMfaVerificationCode(e.target.value)}/><button type="button" className="admin-danger" disabled={savingProfile || !mfaVerificationCode.trim()} onClick={() => void resetMfa()}>Reset MFA</button></div></div>}
+          <div className="admin-profile-assignments"><h4>Current shipment assignments</h4>{profile.assignments?.length ? profile.assignments.map((item) => <div key={item.id}><b>{item.shipment.shipmentNumber}</b><span>{item.shipment.status.replace(/_/g, " ")}</span><small>{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(new Date(item.assignedAt))}{item.reason ? ` · ${item.reason}` : ""}</small></div>) : <p>No current shipment assignments.</p>}</div>
+        </section>
+      )}
       {data && (
         <div className="admin-quote-pagination">
           <span>{data.total} staff</span>{" "}

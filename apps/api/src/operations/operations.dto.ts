@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { ShipmentStatus } from '@prisma/client';
 
 export class ShipmentEventDto {
@@ -31,6 +31,11 @@ export class AssignShipmentDto {
   @IsString()
   @Length(1, 128)
   staffId!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(2, 500)
+  reason?: string;
 }
 
 export class ShipmentListQueryDto {
@@ -63,4 +68,15 @@ export class ShipmentListQueryDto {
   @IsOptional()
   @IsIn(['CUSTOMER', 'STAFF', 'SYSTEM'])
   creationSource?: string;
+}
+
+export class AssignmentListQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 25;
+  @IsOptional() @IsString() @Length(1, 128) staffId?: string;
+  @IsOptional() @IsString() @Length(1, 128) departmentId?: string;
+  @IsOptional() @IsEnum(ShipmentStatus) status?: ShipmentStatus;
+  @IsOptional() @IsIn(["true", "false"]) current?: "true" | "false";
+  @IsOptional() @IsDateString() from?: string;
+  @IsOptional() @IsDateString() to?: string;
 }

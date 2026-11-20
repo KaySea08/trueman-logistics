@@ -134,6 +134,7 @@ model User {
   status UserStatus @default(INVITED)
   mfaEnabled Boolean @default(false)
   mustChangePassword Boolean @default(false)
+  lastLoginAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   customer Customer?
@@ -145,6 +146,9 @@ model User {
   quoteRequestHistory QuoteRequestHistory[] @relation("QuoteRequestHistoryActor")
   shipmentsCreated Shipment[] @relation("ShipmentCreator")
   shipmentsReviewed Shipment[] @relation("ShipmentReviewer")
+  deliveryAssignmentsMade DeliveryAssignment[] @relation("DeliveryAssignmentActor")
+  systemConfigurationsUpdated SystemConfiguration[] @relation("SystemConfigurationUpdater")
+  systemConfigurationVersions SystemConfigurationVersion[] @relation("SystemConfigurationVersionActor")
   @@index([status, createdAt])
 }
 model Customer {
@@ -203,6 +207,9 @@ model Role {
   id String @id @default(cuid())
   name String @unique
   description String?
+  isSystem Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   userRoles UserRole[]
   rolePermissions RolePermission[]
 }
@@ -389,11 +396,15 @@ model DeliveryAssignment {
   id String @id @default(cuid())
   shipmentId String
   staffId String
+  assignedByUserId String?
+  reason String? @db.VarChar(500)
   shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   staff StaffProfile @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  assignedBy User? @relation("DeliveryAssignmentActor", fields: [assignedByUserId], references: [id], onDelete: SetNull)
   assignedAt DateTime @default(now())
   unassignedAt DateTime?
-  @@index([staffId, assignedAt])
+  @@index([staffId, unassignedAt, assignedAt])
+  @@index([shipmentId, assignedAt])
 }
 model Payment {
   id String @id @default(cuid())
@@ -440,9 +451,37 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenDigest String @unique
   expiresAt DateTime
+  lastActivityAt DateTime @default(now())
+  sourceDigest String? @db.VarChar(64)
+  userAgent String? @db.VarChar(512)
   revokedAt DateTime?
   createdAt DateTime @default(now())
   @@index([userId, expiresAt])
+}
+
+model SystemConfiguration {
+  key String @id
+  value Json
+  version Int @default(1)
+  updatedByUserId String?
+  updatedByUser User? @relation("SystemConfigurationUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  versions SystemConfigurationVersion[]
+  @@index([updatedByUserId, updatedAt])
+}
+
+model SystemConfigurationVersion {
+  id String @id @default(cuid())
+  key String
+  value Json
+  version Int
+  actorUserId String?
+  actor User? @relation("SystemConfigurationVersionActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  configuration SystemConfiguration @relation(fields: [key], references: [key], onDelete: Restrict)
+  @@unique([key, version])
+  @@index([key, createdAt])
 }
 model MfaConfiguration {
   id String @id @default(cuid())

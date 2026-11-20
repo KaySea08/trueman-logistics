@@ -11,7 +11,7 @@ import * as argon2 from "argon2";
 import { AuthService } from "../auth/auth.service";
 import { AuditService } from "../common/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { CreateStaffDto, StaffListDto, STAFF_CREATE_ROLES } from "./staff.dto";
+import { AssignStaffRoleDto, CreateStaffDto, StaffListDto, UpdateStaffDto } from "./staff.dto";
 
 @Injectable()
 export class StaffService {
@@ -31,7 +31,7 @@ export class StaffService {
       fullName.length < 2 ||
       employeeCode.length < 2 ||
       employeeCode.length > 50 ||
-      !STAFF_CREATE_ROLES.includes(input.role)
+      input.role === "SUPER_ADMINISTRATOR" || input.role === "CUSTOMER"
     )
       throw new BadRequestException(
         "Provide a valid staff name, employee ID and role.",
@@ -64,6 +64,10 @@ export class StaffService {
         throw new BadRequestException(
           "The selected staff role is unavailable.",
         );
+      if (input.departmentId && !(await tx.department.findFirst({ where: { id: input.departmentId, active: true }, select: { id: true } })))
+        throw new BadRequestException("Select an active department.");
+      if (input.supervisorId && !(await tx.staffProfile.findFirst({ where: { id: input.supervisorId, active: true, user: { status: "ACTIVE" } }, select: { id: true } })))
+        throw new BadRequestException("Select an active staff supervisor.");
       let user;
       try {
         user = await tx.user.create({
@@ -72,7 +76,15 @@ export class StaffService {
             passwordHash,
             status: "INVITED",
             mustChangePassword: true,
-            staff: { create: { fullName, employeeCode } },
+            phone: input.phone?.trim() || null,
+            staff: {
+              create: {
+                fullName,
+                employeeCode,
+                departmentId: input.departmentId || null,
+                supervisorId: input.supervisorId || null,
+              },
+            },
             userRoles: { create: { roleId: role.id } },
           },
           select: {
@@ -108,6 +120,30 @@ export class StaffService {
     } catch {
       return { user, invitationSent: false };
     }
+  }
+
+  async resendInvitation(actorUserId: string, staffId: string) {
+    const user = await this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({ where: { id: actorUserId, status: "ACTIVE", mfaEnabled: true, userRoles: { some: { role: { name: "SUPER_ADMINISTRATOR" } } } }, select: { id: true } });
+      if (!actor) throw new ForbiddenException("Only a super administrator can resend staff invitations.");
+      const staff = await tx.staffProfile.findUnique({
+        where: { id: staffId },
+        select: { userId: true, user: { select: { email: true, status: true, userRoles: { select: { role: { select: { name: true } } } } } } },
+      });
+      if (!staff) throw new NotFoundException("Staff account not found.");
+      if (staff.user.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR") || staff.user.status !== "INVITED") throw new ConflictException("Only invited staff accounts can receive a renewed invitation.");
+      await this.audit.recordInTransaction(tx, { actorUserId, action: "STAFF_INVITATION_RESEND_REQUESTED", targetType: "User", targetId: staff.userId, outcome: "SUCCESS" });
+      return { id: staff.userId, email: staff.user.email };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    try { await this.auth.sendStaffInvitation(user.id); return { invitationSent: true }; }
+    catch {
+      await this.audit.record({ actorUserId, action: "STAFF_INVITATION_SEND_FAILED", targetType: "User", targetId: user.id, outcome: "FAILURE" });
+      return { invitationSent: false };
+    }
+  }
+
+  resetMfa(actorUserId: string, staffId: string, verificationCode: string) {
+    return this.auth.adminResetStaffMfa(actorUserId, staffId, verificationCode);
   }
 
   async changeStatus(
@@ -180,6 +216,10 @@ export class StaffService {
           throw new ConflictException(
             "The account changed. Refresh and retry.",
           );
+        if (action === "DEACTIVATE")
+          await tx.department.updateMany({ where: { headId: staffId }, data: { headId: null } });
+        if (action === "DEACTIVATE" || action === "REACTIVATE")
+          await tx.staffProfile.update({ where: { id: staffId }, data: { active: action === "REACTIVATE" } });
         await tx.session.updateMany({
           where: { userId: staff.user.id, revokedAt: null },
           data: { revokedAt: new Date() },
@@ -215,16 +255,15 @@ export class StaffService {
 
   async list(query: StaffListDto) {
     const search = query.search?.trim();
-    const where: Prisma.StaffProfileWhereInput = {
-      ...(query.status ? { user: { status: query.status } } : {}),
+    const userWhere: Prisma.UserWhereInput = {
+      ...(query.status ? { status: query.status } : {}),
       ...(query.role
-        ? {
-            user: {
-              status: query.status,
-              userRoles: { some: { role: { name: query.role } } },
-            },
-          }
+        ? { userRoles: { some: { role: { name: query.role } } } }
         : {}),
+    };
+    const where: Prisma.StaffProfileWhereInput = {
+      ...(query.active ? { active: query.active === "true" } : {}),
+      ...(query.status || query.role ? { user: userWhere } : {}),
       ...(query.department?.trim()
         ? {
             department: {
@@ -243,11 +282,21 @@ export class StaffService {
           }
         : {}),
     };
+    const sortBy = query.sortBy ?? "name";
+    const sortDirection = query.sortDirection ?? "asc";
+    const orderBy: Prisma.StaffProfileOrderByWithRelationInput[] =
+      sortBy === "createdAt"
+        ? [{ user: { createdAt: sortDirection } }, { id: "asc" }]
+        : sortBy === "department"
+          ? [{ department: { name: sortDirection } }, { fullName: "asc" }]
+          : sortBy === "lastLoginAt"
+            ? [{ user: { lastLoginAt: sortDirection } }, { fullName: "asc" }]
+            : [{ fullName: sortDirection }, { id: "asc" }];
     const [total, items] = await Promise.all([
       this.prisma.staffProfile.count({ where }),
       this.prisma.staffProfile.findMany({
         where,
-        orderBy: [{ fullName: "asc" }, { id: "asc" }],
+        orderBy,
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         select: {
@@ -267,6 +316,7 @@ export class StaffService {
               phone: true,
               status: true,
               createdAt: true,
+              lastLoginAt: true,
               mfaEnabled: true,
               userRoles: { select: { role: { select: { name: true } } } },
             },
@@ -275,5 +325,122 @@ export class StaffService {
       }),
     ]);
     return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async get(staffId: string) {
+    const staff = await this.prisma.staffProfile.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true, employeeCode: true, fullName: true, active: true, jobTitle: true,
+        department: { select: { id: true, name: true } },
+        supervisor: { select: { id: true, fullName: true, employeeCode: true } },
+        reports: { select: { id: true, fullName: true, employeeCode: true } },
+        assignments: {
+          where: { unassignedAt: null },
+          select: { id: true, assignedAt: true, reason: true, shipment: { select: { id: true, shipmentNumber: true, status: true } } },
+          orderBy: { assignedAt: "desc" }, take: 50,
+        },
+        user: {
+          select: {
+            id: true, email: true, phone: true, status: true, createdAt: true,
+            lastLoginAt: true, mfaEnabled: true,
+            userRoles: { select: { role: { select: { id: true, name: true, description: true, rolePermissions: { select: { permission: { select: { key: true } } } } } } } },
+          },
+        },
+      },
+    });
+    if (!staff) throw new NotFoundException("Staff account not found.");
+    return staff;
+  }
+
+  async update(actorUserId: string, staffId: string, input: UpdateStaffDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({
+        where: { id: actorUserId, status: "ACTIVE", mfaEnabled: true, userRoles: { some: { role: { name: "SUPER_ADMINISTRATOR" } } } },
+        select: { id: true },
+      });
+      if (!actor) throw new ForbiddenException("Only a super administrator can edit staff profiles.");
+      const staff = await tx.staffProfile.findUnique({
+        where: { id: staffId },
+        select: { id: true, userId: true, supervisorId: true, user: { select: { userRoles: { select: { role: { select: { name: true } } } } } } },
+      });
+      if (!staff) throw new NotFoundException("Staff account not found.");
+      if (staff.userId === actorUserId || staff.user.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR"))
+        throw new ForbiddenException("Super administrator profiles cannot be changed here.");
+      if (input.departmentId) {
+        const department = await tx.department.findFirst({ where: { id: input.departmentId, active: true }, select: { id: true } });
+        if (!department) throw new BadRequestException("Select an active department.");
+      }
+      if (input.supervisorId) {
+        if (input.supervisorId === staffId) throw new BadRequestException("A staff member cannot supervise themselves.");
+        const supervisor = await tx.staffProfile.findFirst({ where: { id: input.supervisorId, active: true, user: { status: "ACTIVE" } }, select: { id: true } });
+        if (!supervisor) throw new BadRequestException("Select an active staff supervisor.");
+        let ancestorId: string | null = input.supervisorId;
+        const visited = new Set<string>();
+        while (ancestorId) {
+          if (ancestorId === staffId) throw new BadRequestException("This reporting change would create a circular hierarchy.");
+          if (visited.has(ancestorId)) throw new BadRequestException("The existing reporting hierarchy contains a cycle.");
+          visited.add(ancestorId);
+          if (visited.size > 100) throw new BadRequestException("The reporting hierarchy exceeds the supported depth.");
+          const ancestor: { supervisorId: string | null } | null = await tx.staffProfile.findUnique({ where: { id: ancestorId }, select: { supervisorId: true } });
+          ancestorId = ancestor?.supervisorId ?? null;
+        }
+      }
+      const before = await tx.staffProfile.findUniqueOrThrow({ where: { id: staffId }, select: { fullName: true, jobTitle: true, departmentId: true, supervisorId: true } });
+      await tx.staffProfile.update({
+        where: { id: staffId },
+        data: {
+          ...(input.fullName !== undefined ? { fullName: input.fullName.trim() } : {}),
+          ...(input.jobTitle !== undefined ? { jobTitle: input.jobTitle?.trim() || null } : {}),
+          ...(input.departmentId !== undefined ? { departmentId: input.departmentId || null } : {}),
+          ...(input.supervisorId !== undefined ? { supervisorId: input.supervisorId || null } : {}),
+        },
+      });
+      if (input.phone !== undefined) await tx.user.update({ where: { id: staff.userId }, data: { phone: input.phone?.trim() || null } });
+      await this.audit.recordInTransaction(tx, {
+        actorUserId, action: "STAFF_PROFILE_UPDATED", targetType: "StaffProfile", targetId: staffId,
+        outcome: "SUCCESS", metadata: { before, changed: Object.keys(input) },
+      });
+      return { id: staffId, updated: true };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async assignRole(actorUserId: string, staffId: string, input: AssignStaffRoleDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({ where: { id: actorUserId, status: "ACTIVE", mfaEnabled: true, userRoles: { some: { role: { name: "SUPER_ADMINISTRATOR" } } } }, select: { id: true } });
+      if (!actor) throw new ForbiddenException("Only a super administrator can assign staff roles.");
+      const target = await tx.staffProfile.findUnique({
+        where: { id: staffId },
+        select: { userId: true, user: { select: { userRoles: { select: { role: { select: { name: true } } } } } } },
+      });
+      if (!target) throw new NotFoundException("Staff account not found.");
+      if (target.userId === actorUserId || target.user.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR")) throw new ForbiddenException("Super administrator roles cannot be changed here.");
+      const role = await tx.role.findUnique({ where: { id: input.roleId }, select: { id: true, name: true } });
+      if (!role || role.name === "CUSTOMER" || role.name === "SUPER_ADMINISTRATOR") throw new BadRequestException("Select an assignable staff role.");
+      await tx.userRole.upsert({ where: { userId_roleId: { userId: target.userId, roleId: role.id } }, create: { userId: target.userId, roleId: role.id }, update: {} });
+      await tx.session.updateMany({ where: { userId: target.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await this.audit.recordInTransaction(tx, { actorUserId, action: "STAFF_ROLE_ASSIGNED", targetType: "User", targetId: target.userId, outcome: "SUCCESS", metadata: { role: role.name } });
+      return { assigned: role.name };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async removeRole(actorUserId: string, staffId: string, roleId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findFirst({ where: { id: actorUserId, status: "ACTIVE", mfaEnabled: true, userRoles: { some: { role: { name: "SUPER_ADMINISTRATOR" } } } }, select: { id: true } });
+      if (!actor) throw new ForbiddenException("Only a super administrator can remove staff roles.");
+      const target = await tx.staffProfile.findUnique({
+        where: { id: staffId },
+        select: { userId: true, user: { select: { userRoles: { select: { roleId: true, role: { select: { name: true } } } } } } },
+      });
+      if (!target) throw new NotFoundException("Staff account not found.");
+      if (target.userId === actorUserId || target.user.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR")) throw new ForbiddenException("Super administrator roles cannot be changed here.");
+      const assignment = target.user.userRoles.find(({ roleId: assignedRoleId }) => assignedRoleId === roleId);
+      if (!assignment) throw new NotFoundException("Role assignment not found.");
+      if (target.user.userRoles.length <= 1) throw new ConflictException("A staff account must retain at least one role.");
+      await tx.userRole.delete({ where: { userId_roleId: { userId: target.userId, roleId } } });
+      await tx.session.updateMany({ where: { userId: target.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await this.audit.recordInTransaction(tx, { actorUserId, action: "STAFF_ROLE_REMOVED", targetType: "User", targetId: target.userId, outcome: "SUCCESS", metadata: { role: assignment.role.name } });
+      return { removed: assignment.role.name };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }

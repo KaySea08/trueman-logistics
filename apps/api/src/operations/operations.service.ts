@@ -19,6 +19,7 @@ import { REDIS } from "../redis/redis.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../common/audit.service";
 import {
+  AssignmentListQueryDto,
   AssignShipmentDto,
   ReviewShipmentDto,
   ShipmentEventDto,
@@ -322,6 +323,36 @@ export class OperationsService {
     });
   }
 
+  async listAssignments(query: AssignmentListQueryDto) {
+    const where: Prisma.DeliveryAssignmentWhereInput = {
+      ...(query.staffId ? { staffId: query.staffId } : {}),
+      ...(query.departmentId ? { staff: { departmentId: query.departmentId } } : {}),
+      ...(query.status ? { shipment: { status: query.status } } : {}),
+      ...(query.current === "true" ? { unassignedAt: null } : query.current === "false" ? { unassignedAt: { not: null } } : {}),
+      ...(query.from || query.to ? { assignedAt: { ...(query.from ? { gte: new Date(query.from) } : {}), ...(query.to ? { lte: new Date(query.to) } : {}) } } : {}),
+    };
+    const [total, items] = await Promise.all([
+      this.prisma.deliveryAssignment.count({ where }),
+      this.prisma.deliveryAssignment.findMany({
+        where, orderBy: [{ assignedAt: "desc" }, { id: "desc" }], skip: (query.page - 1) * query.pageSize, take: query.pageSize,
+        select: {
+          id: true, assignedAt: true, unassignedAt: true, reason: true,
+          staff: { select: { id: true, fullName: true, employeeCode: true, department: { select: { id: true, name: true } } } },
+          assignedBy: { select: { email: true, staff: { select: { fullName: true, employeeCode: true } } } },
+          shipment: { select: { id: true, shipmentNumber: true, status: true, reviewStatus: true, estimatedDelivery: true } },
+        },
+      }),
+    ]);
+    return { items, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async assignmentWorkload() {
+    const grouped = await this.prisma.deliveryAssignment.groupBy({ by: ["staffId"], where: { unassignedAt: null, staff: { active: true, user: { status: "ACTIVE" } } }, _count: { _all: true } });
+    const counts = new Map(grouped.map((row) => [row.staffId, row._count._all]));
+    const staff = await this.prisma.staffProfile.findMany({ where: { id: { in: grouped.map((row) => row.staffId) } }, orderBy: { fullName: "asc" }, select: { id: true, fullName: true, employeeCode: true, department: { select: { id: true, name: true } } } });
+    return staff.map((person) => ({ ...person, activeAssignments: counts.get(person.id) ?? 0 }));
+  }
+
   async activity() {
     const staffAccounts = await this.prisma.staffProfile.findMany({
       select: { userId: true },
@@ -494,12 +525,15 @@ export class OperationsService {
         },
       });
       if (!staff) throw new NotFoundException("Active staff member not found.");
+      const current = await tx.deliveryAssignment.findFirst({ where: { shipmentId, unassignedAt: null }, select: { id: true, staffId: true } });
+      if (current?.staffId === staff.id) throw new ConflictException("This shipment is already assigned to that staff member.");
+      if (current && !dto.reason?.trim()) throw new BadRequestException("Provide a reason when reassigning a shipment.");
       await tx.deliveryAssignment.updateMany({
         where: { shipmentId, unassignedAt: null },
         data: { unassignedAt: new Date() },
       });
       const assignment = await tx.deliveryAssignment.create({
-        data: { shipmentId, staffId: staff.id },
+        data: { shipmentId, staffId: staff.id, assignedByUserId: actorUserId, reason: dto.reason?.trim() || null },
       });
       await this.audit.recordInTransaction(tx, {
         actorUserId,
@@ -507,10 +541,10 @@ export class OperationsService {
         targetType: "Shipment",
         targetId: shipmentId,
         outcome: "SUCCESS",
-        metadata: { staffId: dto.staffId, assignmentId: assignment.id },
+        metadata: { previousStaffId: current?.staffId ?? null, staffId: dto.staffId, assignmentId: assignment.id, reason: dto.reason?.trim() || null },
       });
       return assignment;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     return result;
   }

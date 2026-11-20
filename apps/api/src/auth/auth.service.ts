@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
   HttpException,
@@ -419,7 +420,7 @@ export class AuthService {
     return { message: "Phone number verified successfully." };
   }
 
-  async login(emailInput: string, password: string, ip: string) {
+  async login(emailInput: string, password: string, ip: string, userAgent = "") {
     const email = emailInput.trim().toLowerCase();
     await this.throttle(`login:${digest(ip)}:${email}`, 8, 900);
     const user = await this.prisma.user.findUnique({
@@ -456,7 +457,7 @@ export class AuthService {
     );
     return {
       user: this.publicUser(user),
-      sessionToken: await this.createSession(user.id, user.passwordHash!),
+      sessionToken: await this.createSession(user.id, user.passwordHash!, ip, userAgent),
       ...(privileged ? { mfaSetupRequired: true } : {}),
     };
   }
@@ -470,7 +471,7 @@ export class AuthService {
     );
     return token;
   }
-  async completeMfaLogin(challenge: string, code: string) {
+  async completeMfaLogin(challenge: string, code: string, ip = "unknown", userAgent = "") {
     await this.throttle(`mfa-login:${digest(challenge)}`, 5, 300);
     const key = `mfa-login:${digest(challenge)}`;
     const stored = await this.redis.get(key);
@@ -529,7 +530,7 @@ export class AuthService {
     }
     return {
       user: this.publicUser(user),
-      sessionToken: await this.createSession(user.id, user.passwordHash),
+      sessionToken: await this.createSession(user.id, user.passwordHash, ip, userAgent),
     };
   }
   private publicUser(user: any) {
@@ -546,7 +547,7 @@ export class AuthService {
       mustChangePassword: user.mustChangePassword,
     };
   }
-  private async createSession(userId: string, expectedPasswordHash: string) {
+  private async createSession(userId: string, expectedPasswordHash: string, ip = "unknown", userAgent = "") {
     const raw = randomBytes(32).toString("base64url");
     await this.prisma.$transaction(async (tx) => {
       const users = await tx.$queryRaw<
@@ -559,13 +560,23 @@ export class AuthService {
         users[0]?.passwordHash !== expectedPasswordHash
       )
         throw new UnauthorizedException("Credentials changed. Sign in again.");
+      const sessionPolicy = tx.systemConfiguration?.findUnique
+        ? await tx.systemConfiguration.findUnique({ where: { key: "session-policy" }, select: { value: true } })
+        : null;
+      const rawSessionDays = sessionPolicy?.value && typeof sessionPolicy.value === "object" && !Array.isArray(sessionPolicy.value)
+        ? (sessionPolicy.value as Record<string, unknown>).sessionDays
+        : undefined;
+      const sessionDays = Number.isInteger(rawSessionDays) && Number(rawSessionDays) >= 1 && Number(rawSessionDays) <= 30 ? Number(rawSessionDays) : SESSION_DAYS;
       await tx.session.create({
         data: {
           userId,
           tokenDigest: digest(raw),
-          expiresAt: new Date(Date.now() + SESSION_DAYS * 86400_000),
+          expiresAt: new Date(Date.now() + sessionDays * 86400_000),
+          sourceDigest: digest(ip),
+          userAgent: userAgent.slice(0, 512),
         },
       });
+      await tx.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
       await this.audit.recordInTransaction(tx, {
         actorUserId: userId,
         action: "SESSION_CREATED",
@@ -602,6 +613,9 @@ export class AuthService {
       session.user.status !== "ACTIVE"
     )
       return null;
+    const activityKey = `session-activity:${session.id}`;
+    if (await this.redis.set(activityKey, "1", "EX", 300, "NX"))
+      await this.prisma.session.updateMany({ where: { id: session.id, revokedAt: null }, data: { lastActivityAt: new Date() } });
     return {
       user: this.publicUser(session.user),
       permissions: session.user.userRoles.flatMap((ur) =>
@@ -911,5 +925,34 @@ export class AuthService {
       outcome: "SUCCESS",
     });
     return { message: "Multi-factor authentication disabled." };
+  }
+
+  async adminResetStaffMfa(actorUserId: string, staffId: string, verificationCode: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.user.findUnique({ where: { id: actorUserId }, include: { mfaConfiguration: true, userRoles: { include: { role: true } } } });
+      if (!actor || actor.status !== "ACTIVE" || !actor.mfaEnabled || !actor.mfaConfiguration || !actor.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR"))
+        throw new ForbiddenException("An active MFA-enabled super administrator is required.");
+      const recoveryDigests = [...actor.mfaConfiguration.recoveryCodeDigests];
+      const recoveryIndex = recoveryDigests.indexOf(digest(verificationCode.trim().toUpperCase()));
+      const validTotp = authenticator.check(verificationCode.trim(), this.decryptSecret(actor.mfaConfiguration.encryptedSecret));
+      if (!validTotp && recoveryIndex < 0) throw new UnauthorizedException("The additional verification code is invalid.");
+      if (!validTotp && recoveryIndex >= 0) {
+        recoveryDigests.splice(recoveryIndex, 1);
+        const consumed = await tx.mfaConfiguration.updateMany({ where: { userId: actorUserId, recoveryCodeDigests: { equals: actor.mfaConfiguration.recoveryCodeDigests } }, data: { recoveryCodeDigests: recoveryDigests } });
+        if (consumed.count !== 1) throw new UnauthorizedException("The additional verification code is invalid.");
+      }
+      const staff = await tx.staffProfile.findUnique({
+        where: { id: staffId },
+        select: { userId: true, user: { select: { status: true, userRoles: { select: { role: { select: { name: true } } } } } } },
+      });
+      if (!staff) throw new BadRequestException("Staff account not found.");
+      if (staff.userId === actorUserId || staff.user.userRoles.some(({ role }) => role.name === "SUPER_ADMINISTRATOR")) throw new ForbiddenException("Super administrator MFA cannot be reset through this workflow.");
+      if (staff.user.status === "DISABLED") throw new ConflictException("Reactivate the staff account before resetting MFA.");
+      await tx.mfaConfiguration.deleteMany({ where: { userId: staff.userId } });
+      await tx.user.update({ where: { id: staff.userId }, data: { mfaEnabled: false } });
+      await tx.session.updateMany({ where: { userId: staff.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await this.audit.recordInTransaction(tx, { actorUserId, action: "STAFF_MFA_RESET", targetType: "User", targetId: staff.userId, outcome: "SUCCESS", metadata: { sessionsRevoked: true, reEnrollmentRequired: true } });
+      return { mfaReset: true, reEnrollmentRequired: true };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 }

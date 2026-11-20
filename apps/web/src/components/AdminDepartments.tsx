@@ -7,7 +7,7 @@ type Department = {
   name: string;
   description: string | null;
   active: boolean;
-  head: { fullName: string } | null;
+  head: { id: string; fullName: string } | null;
   _count: { members: number };
 };
 type DepartmentPage = { items: Department[]; total: number; pageSize: number };
@@ -22,6 +22,12 @@ export default function AdminDepartments() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [version, setVersion] = useState(0);
+  const [editing, setEditing] = useState<Department | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [headId, setHeadId] = useState("");
+  const [active, setActive] = useState(true);
+  const [staffOptions, setStaffOptions] = useState<{ id: string; fullName: string; employeeCode: string; department: { id: string } | null }[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -48,6 +54,12 @@ export default function AdminDepartments() {
       active = false;
     };
   }, [page, version]);
+
+  useEffect(() => {
+    apiRequest<{ items: { id: string; fullName: string; employeeCode: string; active: boolean; department: { id: string } | null; user: { status: string } }[] }>("/admin/staff?page=1&pageSize=100")
+      .then((result) => setStaffOptions(result.items.filter((item) => item.active && item.user.status === "ACTIVE")))
+      .catch(() => setStaffOptions([]));
+  }, []);
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -76,6 +88,20 @@ export default function AdminDepartments() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function beginEdit(department: Department) {
+    setEditing(department); setEditName(department.name); setEditDescription(department.description ?? ""); setHeadId(department.head?.id ?? ""); setActive(department.active); setError("");
+  }
+
+  async function updateDepartment(event: FormEvent) {
+    event.preventDefault(); if (!editing) return;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await apiRequest(`/admin/departments/${encodeURIComponent(editing.id)}`, { method: "PATCH", body: JSON.stringify({ name: editName.trim(), description: editDescription.trim() || null, headId: headId || null, active }) });
+      setEditing(null); setNotice("Department updated."); setVersion((v) => v + 1);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not update department."); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -135,12 +161,13 @@ export default function AdminDepartments() {
               <th>Head</th>
               <th>Members</th>
               <th>Status</th>
+              <th>Manage</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td className="admin-empty" colSpan={4}>
+                <td className="admin-empty" colSpan={5}>
                   Loading departments...
                 </td>
               </tr>
@@ -162,12 +189,13 @@ export default function AdminDepartments() {
                       {department.active ? "Active" : "Inactive"}
                     </span>
                   </td>
+                  <td><button type="button" className="admin-secondary" onClick={() => beginEdit(department)}>Edit</button></td>
                 </tr>
               ))
             ) : (
               !error && (
                 <tr>
-                  <td className="admin-empty" colSpan={4}>
+                  <td className="admin-empty" colSpan={5}>
                     No departments yet.
                   </td>
                 </tr>
@@ -176,6 +204,14 @@ export default function AdminDepartments() {
           </tbody>
         </table>
       </div>
+      {editing && <form className="admin-form admin-staff-profile-form" onSubmit={updateDepartment}>
+        <h3>Edit {editing.name}</h3>
+        <label>Department name<input required minLength={2} maxLength={100} value={editName} onChange={(e) => setEditName(e.target.value)}/></label>
+        <label>Description<input maxLength={1000} value={editDescription} onChange={(e) => setEditDescription(e.target.value)}/></label>
+        <label>Department head<select value={headId} onChange={(e) => setHeadId(e.target.value)}><option value="">Unassigned</option>{staffOptions.filter((person) => person.department?.id === editing.id).map((person) => <option key={person.id} value={person.id}>{person.fullName} · {person.employeeCode}</option>)}</select></label>
+        <label className="admin-checkbox-field"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)}/> Active</label>
+        <div className="admin-action-row"><button className="admin-primary" disabled={busy}>{busy ? "Saving…" : "Save department"}</button><button type="button" className="admin-secondary" onClick={() => setEditing(null)}>Cancel</button></div>
+      </form>}
       {data && (
         <div className="admin-quote-pagination">
           <span>{data.total} departments</span>{" "}
