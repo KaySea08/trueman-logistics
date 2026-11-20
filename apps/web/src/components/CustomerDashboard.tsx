@@ -16,6 +16,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import Brand from "./Brand";
+import { useModalFocus } from "../hooks/useModalFocus";
 
 const API_ERROR_TEXT = "We couldn't load this information. Please try again.";
 
@@ -150,6 +151,12 @@ export default function CustomerDashboard({
   const [acceptance, setAcceptance] = useState<QuoteAcceptance | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [reviewError, setReviewError] = useState("");
+  const quoteDialogRef = useModalFocus<HTMLElement>(
+    () => {
+      if (!accepting) setReviewingQuote(null);
+    },
+    reviewingQuote !== null,
+  );
 
   const shipmentsQuery = useQuery({
     queryKey: ["customer", user?.id, "shipments"],
@@ -805,10 +812,12 @@ export default function CustomerDashboard({
           }}
         >
           <section
+            ref={quoteDialogRef}
             className="customer-quote-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="quote-review-title"
+            tabIndex={-1}
           >
             <button
               type="button"

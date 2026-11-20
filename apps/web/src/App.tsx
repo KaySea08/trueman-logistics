@@ -120,7 +120,11 @@ function Header({
       <header className="site-header china-header">
         <div className="container nav-inner">
           <Brand />
-          <nav className={open ? "nav-open" : ""} aria-label="Main navigation">
+          <nav
+            id="primary-navigation"
+            className={open ? "nav-open" : ""}
+            aria-label="Main navigation"
+          >
             {nav.map((item, index) => (
               <a
                 key={item.href}
@@ -158,6 +162,8 @@ function Header({
             className="menu-toggle"
             onClick={() => setOpen(!open)}
             aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls="primary-navigation"
           >
             {open ? <X /> : <Menu />}
           </button>

@@ -4,6 +4,7 @@ import { CircleCheck, Eye, EyeOff, X } from "lucide-react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth, type AuthUser } from "../auth/AuthContext";
 import Brand from "./Brand";
+import { useModalFocus } from "../hooks/useModalFocus";
 
 type Mode =
   | "login"
@@ -15,6 +16,7 @@ type Mode =
   | "reset"
   | "confirm";
 export default function LoginDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useModalFocus<HTMLElement>(onClose);
   const navigate = useNavigate();
   const { login, verifyMfa, setupMfa, enableMfa, consumeReturnTo } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
@@ -168,11 +170,13 @@ export default function LoginDialog({ onClose }: { onClose: () => void }) {
       }}
     >
       <section
+        ref={dialogRef}
         className="access-panel customer-access-panel"
         data-lenis-prevent
         role="dialog"
         aria-modal="true"
         aria-labelledby="access-title"
+        tabIndex={-1}
       >
         <button className="access-close" onClick={onClose} aria-label="Close">
           <X />

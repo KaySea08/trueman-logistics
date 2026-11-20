@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { apiRequest, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useModalFocus } from "../hooks/useModalFocus";
 
 type QuoteRequestReceipt = {
   id: string;
@@ -25,6 +26,7 @@ export default function ShipmentQuote({
   onClose: () => void;
   onLogin: () => void;
 }) {
+  const dialogRef = useModalFocus<HTMLElement>(onClose);
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [mode, setMode] = useState("AIR");
@@ -105,11 +107,13 @@ export default function ShipmentQuote({
       }}
     >
       <section
+        ref={dialogRef}
         className="shipment-quote-modal"
         data-lenis-prevent
         role="dialog"
         aria-modal="true"
         aria-labelledby="shipment-quote-title"
+        tabIndex={-1}
       >
         <header>
           <div>
