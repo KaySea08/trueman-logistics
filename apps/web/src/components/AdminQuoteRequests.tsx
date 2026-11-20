@@ -7,11 +7,7 @@ import {
   X,
   Calculator,
 } from "lucide-react";
-import { apiRequest } from "../api/client";
-
-const API =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://localhost:3000/api/v1";
+import { API_BASE_URL, apiRequest } from "../api/client";
 
 type QuoteRequestRow = {
   id: string;
@@ -336,7 +332,7 @@ export default function AdminQuoteRequests({
       void loadPage(null, false, true);
       void loadMetrics();
     };
-    const source = new EventSource(`${API}/admin/quote-requests/events`, {
+    const source = new EventSource(`${API_BASE_URL}/admin/quote-requests/events`, {
       withCredentials: true,
     });
     source.addEventListener("quote-request", refresh);

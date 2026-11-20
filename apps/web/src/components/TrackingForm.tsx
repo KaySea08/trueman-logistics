@@ -1,10 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, PackageSearch, CheckCircle2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-
-const API =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  'http://localhost:3000/api/v1';
+import { apiFetch } from '../api/client';
 
 type TrackingEvent = {
   status: string;
@@ -49,7 +46,7 @@ export default function TrackingForm({ compact = false }: { compact?: boolean })
     setResult(null);
 
     try {
-      const response = await fetch(`${API}/tracking/${encodeURIComponent(cleaned)}`);
+      const response = await apiFetch(`/tracking/${encodeURIComponent(cleaned)}`);
       const data = await response.json();
 
       if (!response.ok) {

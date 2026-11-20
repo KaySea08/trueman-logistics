@@ -2181,3 +2181,149 @@
     white-space: normal;
   }
 }
+
+/* Consolidated admin navigation */
+.admin-side-label {
+  padding-bottom: 9px;
+}
+.admin-side-nav {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.admin-side-nav > button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 11px;
+  border: 0;
+  border-radius: 9px;
+  padding: 10px 11px;
+  background: transparent;
+  color: #a9bfcb;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-side-nav > button:hover,
+.admin-side-nav > button.active {
+  background: #1c4057;
+  color: #fff;
+}
+.admin-side-nav > button.active::before {
+  position: absolute;
+  inset: 9px auto 9px 0;
+  width: 3px;
+  border-radius: 3px;
+  background: #6ac4c2;
+  content: "";
+}
+.admin-section-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin: 0 0 22px;
+  border-bottom: 1px solid #d9e3e9;
+  scrollbar-width: thin;
+}
+.admin-section-tabs > button {
+  position: relative;
+  min-height: 42px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  padding: 9px 13px;
+  background: transparent;
+  color: #587286;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.admin-section-tabs > button:hover,
+.admin-section-tabs > button.active {
+  background: #eaf2f5;
+  color: #174a68;
+}
+.admin-section-tabs > button.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 2px;
+  background: #237b86;
+  content: "";
+}
+.admin-signout-button {
+  justify-content: center !important;
+  min-height: 42px;
+  border: 1px solid #396079 !important;
+  background: #173b53 !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+}
+.admin-signout-button:hover {
+  border-color: #79c4c2 !important;
+  background: #24566d !important;
+}
+@media (max-width: 800px) {
+  .admin-side-label {
+    display: none;
+  }
+  .admin-side-nav {
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 3px;
+    overflow: visible;
+  }
+  .admin-side-nav > button {
+    width: auto;
+    min-height: 38px;
+    padding: 9px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .admin-side-nav > button.active::before {
+    inset: auto 10px 3px;
+    width: auto;
+    height: 2px;
+  }
+  .admin-side-bottom {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 8px;
+    background: #102b40;
+  }
+  .admin-side-bottom > .admin-signout-button {
+    min-height: 38px;
+    padding: 8px 11px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 480px) {
+  .admin-side-nav > button {
+    gap: 6px;
+    padding-inline: 8px;
+    font-size: 10px;
+  }
+  .admin-side-bottom > .admin-signout-button {
+    padding-inline: 9px;
+    font-size: 11px;
+  }
+}

@@ -1,10 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Headphones, X } from "lucide-react";
 import { useModalFocus } from "../hooks/useModalFocus";
-
-const API =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://localhost:3000/api/v1";
+import { apiFetch } from "../api/client";
 
 export default function ServiceInquiry({
   service,
@@ -31,7 +28,7 @@ export default function ServiceInquiry({
     setSuccess("");
 
     try {
-      const response = await fetch(`${API}/support/inquiries`, {
+      const response = await apiFetch("/support/inquiries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

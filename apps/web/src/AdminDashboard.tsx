@@ -3,7 +3,6 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
-  Building2,
   CheckCircle2,
   ClipboardList,
   Clock3,
@@ -25,11 +24,8 @@ import AdminStaffDirectory from "./components/AdminStaffDirectory";
 import AdminDepartments from "./components/AdminDepartments";
 import AdminAccountSecurity from "./components/AdminAccountSecurity";
 import { AdminAssignments, AdminAuditHistory, AdminConfiguration, AdminRoleManager, AdminSessions } from "./components/AdminGovernance";
+import { apiFetch } from "./api/client";
 import "./admin.css";
-
-const API =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  "http://localhost:3000/api/v1";
 
 type Summary = {
   total: number;
@@ -116,6 +112,19 @@ type StaffSession = {
   mustChangePassword: boolean;
 };
 
+type AdminTab =
+  | "shipments"
+  | "quotes"
+  | "activity"
+  | "staff"
+  | "departments"
+  | "assignments"
+  | "roles"
+  | "sessions"
+  | "audit"
+  | "configuration"
+  | "account";
+
 const shipmentStatuses = [
   "ORDER_RECEIVED",
   "ORDER_CONFIRMED",
@@ -138,11 +147,7 @@ const shipmentStatuses = [
 ];
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
-  });
+  const response = await apiFetch(path, init);
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = Array.isArray(data.message)
@@ -208,9 +213,7 @@ export default function AdminDashboard() {
   const [eventStatus, setEventStatus] = useState("ORDER_CONFIRMED");
   const [eventLocation, setEventLocation] = useState("");
   const [eventNote, setEventNote] = useState("");
-  const [tab, setTab] = useState<
-    "shipments" | "quotes" | "activity" | "staff" | "departments" | "assignments" | "roles" | "sessions" | "audit" | "configuration" | "account"
-  >("shipments");
+  const [tab, setTab] = useState<AdminTab>("shipments");
   const [refreshing, setRefreshing] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
@@ -230,6 +233,43 @@ export default function AdminDashboard() {
   const canManageRoles = !mustChangePassword && permissions.includes("roles:manage");
   const canManageSessions = !mustChangePassword && permissions.includes("sessions:manage");
   const canReadAudit = !mustChangePassword && permissions.includes("audit:read");
+
+  const navigationGroup =
+    tab === "shipments" || tab === "activity" || tab === "assignments"
+      ? "operations"
+      : tab === "quotes"
+        ? "quotes"
+        : tab === "staff" || tab === "departments" || tab === "roles"
+          ? "people"
+          : "security";
+  const openNavigationGroup = (group: "operations" | "quotes" | "people" | "security") => {
+    if (group === "operations") setTab("shipments");
+    else if (group === "quotes") setTab("quotes");
+    else if (group === "people") {
+      setTab(canManageStaff ? "staff" : canManageDepartments ? "departments" : "roles");
+    } else setTab(canManageSessions ? "sessions" : canReadAudit ? "audit" : canManageDepartments ? "configuration" : "account");
+  };
+  const sectionTabs: { value: AdminTab; label: string }[] =
+    navigationGroup === "operations"
+      ? [
+          { value: "shipments", label: "Shipments" },
+          { value: "activity", label: "Staff activity" },
+          { value: "assignments", label: "Assignments & workload" },
+        ]
+      : navigationGroup === "people"
+        ? [
+            ...(canManageStaff ? [{ value: "staff" as const, label: "Staff directory" }] : []),
+            ...(canManageDepartments ? [{ value: "departments" as const, label: "Departments" }] : []),
+            ...(canManageRoles ? [{ value: "roles" as const, label: "Roles & permissions" }] : []),
+          ]
+        : navigationGroup === "security"
+          ? [
+              ...(canManageSessions ? [{ value: "sessions" as const, label: "Sessions & devices" }] : []),
+              ...(canReadAudit ? [{ value: "audit" as const, label: "Audit history" }] : []),
+              ...(canManageDepartments ? [{ value: "configuration" as const, label: "System configuration" }] : []),
+              { value: "account", label: "Account security" },
+            ]
+          : [];
 
   const query = useMemo(() => {
     const params = new URLSearchParams({ page: "1", pageSize: "50" });
@@ -791,62 +831,31 @@ export default function AdminDashboard() {
           </b>
         </a>
         <div className="admin-side-label">WORKSPACE</div>
-        {canAccessOperations && (
-          <button
-            className={tab === "shipments" ? "active" : ""}
-            onClick={() => setTab("shipments")}
-          >
-            <ClipboardList size={17} /> Operations
+        <nav className="admin-side-nav" aria-label="Admin sections">
+          {canAccessOperations && (
+            <button className={navigationGroup === "operations" ? "active" : ""} aria-current={navigationGroup === "operations" ? "page" : undefined} onClick={() => openNavigationGroup("operations")}>
+              <ClipboardList size={17} /> Operations
+            </button>
+          )}
+          {canAccessQuotes && (
+            <button className={navigationGroup === "quotes" ? "active" : ""} aria-current={navigationGroup === "quotes" ? "page" : undefined} onClick={() => openNavigationGroup("quotes")}>
+              <Package size={17} /> Quote requests
+            </button>
+          )}
+          {(canManageStaff || canManageDepartments || canManageRoles) && (
+            <button className={navigationGroup === "people" ? "active" : ""} aria-current={navigationGroup === "people" ? "page" : undefined} onClick={() => openNavigationGroup("people")}>
+              <Users size={17} /> Staff &amp; access
+            </button>
+          )}
+          <button className={navigationGroup === "security" ? "active" : ""} aria-current={navigationGroup === "security" ? "page" : undefined} onClick={() => openNavigationGroup("security")}>
+            <LockKeyhole size={17} /> Security &amp; settings
           </button>
-        )}
-        {canAccessQuotes && (
-          <button
-            className={tab === "quotes" ? "active" : ""}
-            onClick={() => setTab("quotes")}
-          >
-            <ClipboardList size={17} /> Quote requests
-          </button>
-        )}
-        {canAccessOperations && (
-          <button
-            className={tab === "activity" ? "active" : ""}
-            onClick={() => setTab("activity")}
-          >
-            <Activity size={17} /> Staff activity
-          </button>
-        )}
-        {canManageStaff && (
-          <button
-            className={tab === "staff" ? "active" : ""}
-            onClick={() => setTab("staff")}
-          >
-            <Users size={17} /> Staff directory
-          </button>
-        )}
-        {canManageDepartments && (
-          <button
-            className={tab === "departments" ? "active" : ""}
-            onClick={() => setTab("departments")}
-          >
-            <Building2 size={17} /> Departments
-          </button>
-        )}
-        {canManageRoles && <button className={tab === "roles" ? "active" : ""} onClick={() => setTab("roles")}><ShieldCheck size={17} /> Roles &amp; permissions</button>}
-        {canAccessOperations && <button className={tab === "assignments" ? "active" : ""} onClick={() => setTab("assignments")}><Truck size={17} /> Assignments &amp; workload</button>}
-        {canManageSessions && <button className={tab === "sessions" ? "active" : ""} onClick={() => setTab("sessions")}><LockKeyhole size={17} /> Sessions &amp; devices</button>}
-        {canReadAudit && <button className={tab === "audit" ? "active" : ""} onClick={() => setTab("audit")}><Activity size={17} /> Audit history</button>}
-        {canManageDepartments && <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}><LockKeyhole size={17} /> System configuration</button>}
-        <button
-          className={tab === "account" ? "active" : ""}
-          onClick={() => setTab("account")}
-        >
-          <LockKeyhole size={17} /> Account security
-        </button>
+        </nav>
         <div className="admin-side-bottom">
           <div className="admin-secure-state">
             <span /> Secure session active
           </div>
-          <button onClick={logout}>
+          <button className="admin-signout-button" onClick={logout}>
             <LogOut size={17} /> Sign out
           </button>
           <a href="/">← Public website</a>
@@ -901,6 +910,21 @@ export default function AdminDashboard() {
               <XCircle size={16} />
             </button>
           </div>
+        )}
+        {sectionTabs.length > 1 && (
+          <nav className="admin-section-tabs" aria-label="Workspace pages">
+            {sectionTabs.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={tab === item.value ? "active" : ""}
+                aria-current={tab === item.value ? "page" : undefined}
+                onClick={() => setTab(item.value)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
         )}
         {summary && (tab === "shipments" || tab === "activity") && (
           <section className="admin-stat-grid">
